@@ -1,0 +1,85 @@
+# Challenges
+
+## Participant flow
+
+- **Levels 1–9:** send prompts, inspect responses, recover your team's flag, submit it.
+- **Level 10:** edit the isolated leaderboard and verify the exploit. No chat or flag submission.
+
+The API tells the UI which interface to show through `interaction` and `completionMethod`. Official points come from unique server-created solve records, never from sandbox scores.
+
+## Files
+
+| File | Responsibility |
+| --- | --- |
+| `packages/challenges/src/index.ts` | Public titles, descriptions, points, hints, limits, interaction types |
+| `packages/challenges/src/server.ts` | Prompt, input-guard, and output-guard policies |
+| `packages/contracts/src/index.ts` | Shared request/response types and validation |
+| `apps/web/src/server/llm.ts` | Execute the defense pipeline |
+| `apps/web/src/server/model-provider.ts` | AI SDK calls to GPT 6 Luna |
+| `apps/web/src/server/challenges.ts` | Conversations, request budgets, submissions, scoring |
+| `apps/web/src/server/sandbox.ts` | Sandbox edits and completion verification |
+
+Import `@cryptum/challenges` for public metadata. Import `@cryptum/challenges/server` only on the server. Neither contains runtime flags or credentials.
+
+## LLM pipeline
+
+```text
+reserve request → input guard → build instructions → model → output guard → save turn
+```
+
+Database transactions are short. They are not held open while waiting for the model. Failed requests count toward the rate limit; conversation resets cannot erase that budget. Conflicting requests are rejected, and expired replies are discarded.
+
+The provider uses AI SDK `instructions` for trusted instructions and `messages` for user/assistant history. Generation and classifiers use the same model. Provider errors are sanitized; flags and credentials are not logged.
+
+| Level | Prompt | Input guard | Output guard |
+| --- | --- | --- | --- |
+| 1 | Open | None | None |
+| 2 | Private | None | None |
+| 3 | Hardened | None | None |
+| 4 | Hardened | Keyword | None |
+| 5 | Hardened | None | Exact flag match |
+| 6 | Hardened | None | Encoding-aware, limited inspection window |
+| 7 | Hardened | Classifier | None |
+| 8 | Hardened | Classifier | Classifier |
+| 9 | Hardened | Conversation classifier | Classifier |
+| 10 | No model | Sandbox exploit | Server verification |
+
+These weaknesses are intentional CTF mechanics. Do not use them to protect real secrets.
+
+## Developer interface
+
+The execution function takes a typed request:
+
+```ts
+await runChallengeModel({
+  definition, // from getChallengeDefinition(id)
+  flag,       // generated on the server for this team and challenge
+  history,    // user/assistant turns
+  message,    // current participant input
+});
+```
+
+Application routes should use the challenges service around this function so authorization, limits, persistence, and scoring are not skipped. Tests can pass a typed provider function as its second argument.
+
+The browser client implements `CtfApi` from `@cryptum/contracts`:
+
+- `GET /api/challenges`: active catalog.
+- `POST /api/challenges/:id/messages`: `{ content }` → updated session.
+- `DELETE /api/challenges/:id/conversation`: reset chat history.
+- `POST /api/challenges/:id/submissions`: `{ flag }` → submission result and session.
+- `GET /api/challenge/leaderboard`: sandbox entries.
+- `PATCH /api/challenge/leaderboard/teams/:id`: `{ score?, display_name? }` → sandbox edit.
+- `POST /api/challenge/leaderboard/complete`: `{}` → verified completion and award.
+- `GET /api/leaderboard`: official standings.
+
+Mutations require Google identity, a matching team session, JSON, and a same-origin request. Cross-team edits are allowed only in the deliberately vulnerable sandbox.
+
+## Add a challenge
+
+1. Add public metadata in `packages/challenges/src/index.ts`.
+2. Add its execution policy in `packages/challenges/src/server.ts`.
+3. Run `pnpm db:seed` on a development branch.
+4. Add tests for its guards and completion method. A new sandbox type also needs its own server-side verification; the current sandbox service handles the leaderboard challenge only.
+5. Run the checks in the root README.
+
+IDs are positive PostgreSQL integers, not capped at ten. Missing or inconsistent definitions fail closed. Schema changes need migrations; catalog changes do not.
