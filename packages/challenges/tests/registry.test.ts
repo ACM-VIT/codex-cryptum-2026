@@ -34,7 +34,7 @@ describe("challenge registry", () => {
       ["hardened", "none", "normalized"],
       ["hardened", "classifier", "none"],
       ["hardened", "classifier", "classifier"],
-      ["vault", "conversation", "classifier"],
+      ["vault", "blocklist", "conversation"],
     ];
     const llm = challengeDefinitions.filter(isLlmDefinition);
     expect(llm.map(({ execution }) => [execution.promptPolicy, execution.inputGuard, execution.outputGuard])).toEqual(matrix);

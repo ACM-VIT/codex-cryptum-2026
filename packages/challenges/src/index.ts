@@ -113,7 +113,7 @@ export const challengeCatalog: Challenge[] = [
     difficulty: "Expert",
     points: 900,
     description: "A judge reviews the whole conversation. You have a limited number of turns in each session, so make every message count.",
-    defenses: ["Conversation judge", "Turn budget", "Hidden reasoning"],
+    defenses: ["Input filter", "Output filter", "Conversation judge", "Turn budget", "Hidden reasoning"],
     hint: "The judge can see context across turns. Plan before you send.",
     turnLimit: 6,
     interaction: "chat",

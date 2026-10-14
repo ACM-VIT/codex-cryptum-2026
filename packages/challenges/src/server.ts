@@ -5,8 +5,8 @@ export type LlmChallengeDefinition = {
   execution: {
     kind: "llm";
     promptPolicy: "open" | "private" | "hardened" | "vault";
-    inputGuard: "none" | "keyword" | "classifier" | "conversation";
-    outputGuard: "none" | "exact" | "normalized" | "classifier";
+    inputGuard: "none" | "keyword" | "classifier" | "blocklist";
+    outputGuard: "none" | "exact" | "normalized" | "classifier" | "conversation";
   };
 };
 
@@ -25,7 +25,7 @@ export const challengeDefinitions: readonly ChallengeDefinition[] = [
   { id: 6, execution: { kind: "llm", promptPolicy: "hardened", inputGuard: "none", outputGuard: "normalized" } },
   { id: 7, execution: { kind: "llm", promptPolicy: "hardened", inputGuard: "classifier", outputGuard: "none" } },
   { id: 8, execution: { kind: "llm", promptPolicy: "hardened", inputGuard: "classifier", outputGuard: "classifier" } },
-  { id: 9, execution: { kind: "llm", promptPolicy: "vault", inputGuard: "conversation", outputGuard: "classifier" } },
+  { id: 9, execution: { kind: "llm", promptPolicy: "vault", inputGuard: "blocklist", outputGuard: "conversation" } },
   { id: 10, execution: { kind: "sandbox" } },
 ];
 
