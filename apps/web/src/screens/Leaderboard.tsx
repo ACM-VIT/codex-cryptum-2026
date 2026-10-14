@@ -181,8 +181,8 @@ export function LeaderboardPage() {
         </span>
       </div>
       {challenges.filter((challenge) => challenge.interaction === "sandbox").map((challenge) => (
-      <Link key={challenge.id} className="bonus-card" href={`/arena/${challenge.id}`}>
-        <div className="bonus-icon">
+      <Link key={challenge.id} className="sandbox-link" href={`/arena/${challenge.id}`}>
+        <div className="sandbox-link-icon">
           <Terminal size={25} />
         </div>
         <div>

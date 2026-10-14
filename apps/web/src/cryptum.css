@@ -187,10 +187,6 @@ h3 {
 .bento-level-10 {
   grid-column: span 1;
 }
-.bento-bonus {
-  grid-column: span 3;
-  background: #1b2940 !important;
-}
 .bento-background {
   position: absolute;
   inset: 0;
@@ -351,10 +347,10 @@ h3 {
 .join-form form {
   margin-top: 35px;
 }
-.bonus-card {
+.sandbox-link {
   background: #d8ff3e06;
 }
-.bonus-card h2 {
+.sandbox-link h2 {
   font-size: 27px;
 }
 .leaderboard-stats b {
@@ -818,10 +814,6 @@ body[data-page="home"],
   flex: 1 1 calc(33.333% - 12px);
   min-height: 260px;
 }
-.bento-grid > .bento-bonus {
-  flex-basis: 100%;
-  min-height: 220px;
-}
 .leaderboard-stats {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -850,9 +842,6 @@ body[data-page="home"],
 @media (max-width: 900px) {
   .bento-grid > .bento-card {
     flex-basis: calc(50% - 9px);
-  }
-  .bento-grid > .bento-bonus {
-    flex-basis: 100%;
   }
 }
 @media (max-width: 640px) {
@@ -1238,7 +1227,7 @@ h3,
   margin-left: 0;
   margin-right: 0;
 }
-.leaderboard-page .bonus-card h2 {
+.leaderboard-page .sandbox-link h2 {
   font-family: "Fraunces", Georgia, serif;
   font-weight: 400;
   text-transform: none;

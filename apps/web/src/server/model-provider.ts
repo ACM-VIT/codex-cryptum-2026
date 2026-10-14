@@ -66,4 +66,3 @@ export async function complete({ instructions, messages, maxOutputTokens = 2048 
     throw new HttpError(503, "Model unavailable");
   }
 }
-

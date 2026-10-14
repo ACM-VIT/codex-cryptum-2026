@@ -1218,7 +1218,7 @@ progress::-webkit-progress-value {
 .is-solved .card-bottom > svg {
   color: var(--green);
 }
-.bonus-card {
+.sandbox-link {
   display: flex;
   align-items: center;
   gap: 25px;
@@ -1229,10 +1229,10 @@ progress::-webkit-progress-value {
   margin-top: 34px;
   transition: background 0.2s;
 }
-.bonus-card:hover {
+.sandbox-link:hover {
   background: #d8ff3e0e;
 }
-.bonus-icon {
+.sandbox-link-icon {
   display: grid;
   place-items: center;
   width: 62px;
@@ -1242,29 +1242,18 @@ progress::-webkit-progress-value {
   color: var(--accent);
   flex-shrink: 0;
 }
-.bonus-card > div:nth-child(2) {
+.sandbox-link > div:nth-child(2) {
   flex: 1;
 }
-.bonus-card .section-kicker {
+.sandbox-link .section-kicker {
   font-size: 8px;
   margin-bottom: 8px;
 }
-.bonus-card h2 {
+.sandbox-link h2 {
   font-size: 29px;
   margin-bottom: 9px;
 }
-.bonus-card p {
-  font-size: 10px;
-  color: var(--muted);
-}
-.bonus-link {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  font-size: 10px;
-}
-.bonus-card > svg,
-.bonus-link svg {
+.sandbox-link > svg {
   color: var(--accent);
 }
 
@@ -1977,27 +1966,6 @@ progress::-webkit-progress-value {
   padding: 18px 0;
   letter-spacing: 0.05em;
 }
-.bonus-page {
-  max-width: 1200px;
-}
-.bonus-page-heading {
-  text-align: center;
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  padding: 55px 0 45px;
-}
-.bonus-page-heading .bonus-icon {
-  margin-bottom: 27px;
-}
-.bonus-page-heading h1 {
-  font-size: 68px;
-  margin-bottom: 19px;
-}
-.bonus-page-heading .serif {
-  color: var(--muted);
-  font-size: 21px;
-}
 .brief-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2017,9 +1985,6 @@ progress::-webkit-progress-value {
   font-size: 12px;
   line-height: 1.9;
   color: var(--muted);
-  margin-top: 14px;
-}
-.bonus-page > .button {
   margin-top: 14px;
 }
 .briefing-banner {
@@ -2448,10 +2413,6 @@ progress::-webkit-progress-value {
     gap: 25px;
     font-size: 9px;
   }
-  .bonus-link {
-    font-size: 0;
-    gap: 0;
-  }
   .arena-grid {
     grid-template-columns: 180px minmax(0, 1fr);
     height: calc(100dvh - 165px);
@@ -2507,9 +2468,6 @@ progress::-webkit-progress-value {
   .leaderboard-table td,
   .leaderboard-table th {
     padding-inline: 14px;
-  }
-  .bonus-page-heading h1 {
-    font-size: 55px;
   }
   .briefing-page .page-heading {
     align-items: flex-start;
@@ -2877,32 +2835,26 @@ progress::-webkit-progress-value {
   .card-bottom {
     padding: 17px 0;
   }
-  .bonus-card {
+  .sandbox-link {
     padding: 22px;
     gap: 17px;
     flex-wrap: wrap;
     margin-top: 25px;
   }
-  .bonus-icon {
+  .sandbox-link-icon {
     width: 46px;
     height: 46px;
   }
-  .bonus-card > div:nth-child(2) {
+  .sandbox-link > div:nth-child(2) {
     min-width: 160px;
   }
-  .bonus-card h2 {
+  .sandbox-link h2 {
     font-size: 28px;
   }
-  .bonus-card .section-kicker {
+  .sandbox-link .section-kicker {
     font-size: 7px;
   }
-  .bonus-card p {
-    font-size: 10px;
-  }
-  .bonus-card > .bonus-link {
-    display: none;
-  }
-  .bonus-card > svg {
+  .sandbox-link > svg {
     display: none;
   }
   .join-page {
@@ -3172,15 +3124,6 @@ progress::-webkit-progress-value {
     height: 27px;
     margin-right: 9px;
     font-size: 8px;
-  }
-  .bonus-page-heading {
-    padding: 35px 0;
-  }
-  .bonus-page-heading h1 {
-    font-size: 48px;
-  }
-  .bonus-page-heading .serif {
-    font-size: 17px;
   }
   .brief-grid {
     grid-template-columns: 1fr;
