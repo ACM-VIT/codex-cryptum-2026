@@ -38,6 +38,10 @@ def sh(*cmd):
         return ""
 
 
+def tagged(name):
+    return name if ":" in name.rsplit("/", 1)[-1] else f"{name}:latest"
+
+
 def check_ollama(model):
     try:
         version = get(f"{OLLAMA}/api/version")["version"]
@@ -49,7 +53,7 @@ def check_ollama(model):
         names = [m["name"] for m in get(f"{OLLAMA}/api/tags")["models"]]
     except (OSError, ValueError, KeyError):
         names = []
-    if any(n.split(":")[0] == model for n in names):
+    if any(tagged(n) == tagged(model) for n in names):
         out.append((PASS, "model installed", model))
     else:
         out.append((FAIL, "model installed", f"{model} missing; run: ollama create {model} -f infra/ollama/Modelfile"))
@@ -58,8 +62,8 @@ def check_ollama(model):
         loaded = get(f"{OLLAMA}/api/ps")["models"]
     except (OSError, ValueError, KeyError):
         loaded = []
-    mine = [m for m in loaded if m["name"].split(":")[0] == model]
-    others = [m["name"] for m in loaded if m["name"].split(":")[0] != model]
+    mine = [m for m in loaded if tagged(m["name"]) == tagged(model)]
+    others = [m["name"] for m in loaded if tagged(m["name"]) != tagged(model)]
     if not mine:
         out.append((WARN, "model loaded", "not in memory; first request will be slow. run: ./scripts/ollama_env.sh warm"))
     else:
@@ -257,7 +261,7 @@ def run(args):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gate", default="http://127.0.0.1:8080")
-    ap.add_argument("--model", default="codex-qwen")
+    ap.add_argument("--model", default="qwen3:8b")
     ap.add_argument("--timeout", type=float, default=60)
     ap.add_argument("--no-gate", action="store_true")
     ap.add_argument("--watch", type=float, default=0, help="repeat every N seconds")
