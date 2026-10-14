@@ -702,11 +702,11 @@ body[data-page="home"],
 
 /* One pinned viewport: title first, then scroll into the entry composition. */
 .cryptum-parallax {
-  height: 200svh;
-  overflow: visible;
+  height: 100svh;
+  overflow: hidden;
 }
 .cryptum-hero {
-  position: sticky;
+  position: relative;
   top: 0;
   height: 100svh;
   min-height: 0;
