@@ -20,7 +20,8 @@ h3 {
 }
 .icon-header {
   height: 86px;
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 30;
   padding: 0 var(--edge);
   display: flex;
@@ -746,8 +747,7 @@ body[data-page="home"],
 }
 @media (prefers-reduced-motion: no-preference) {
   .hero-keyhole,
-  .cryptum-intro,
-  .icon-header-home {
+  .cryptum-intro {
     visibility: hidden;
   }
 }

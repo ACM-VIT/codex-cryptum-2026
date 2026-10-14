@@ -22,7 +22,6 @@ export function ParallaxComponent({ children }: { children?: ReactNode }) {
         const reveals = container.querySelectorAll(
           ".hero-keyhole, .cryptum-intro",
         );
-        const header = document.querySelector(".icon-header-home");
         const timeline = gsap.timeline({ paused: true });
         timeline.fromTo(
           title,
@@ -42,13 +41,6 @@ export function ParallaxComponent({ children }: { children?: ReactNode }) {
           { autoAlpha: 1, y: 0, duration: 0.35, stagger: 0.06 },
           0.55,
         );
-        if (header)
-          timeline.fromTo(
-            header,
-            { autoAlpha: 0 },
-            { autoAlpha: 1, duration: 0.25 },
-            0.72,
-          );
         let disposed = false;
         const completed = new Set<string>();
         titleComplete.current = (word) => {
