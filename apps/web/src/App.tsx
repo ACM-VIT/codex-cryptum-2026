@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { CheckCircle2, LogOut, Home, LayoutGrid, Trophy, UserRound, LogIn, Users } from "lucide-react";
@@ -21,6 +21,7 @@ export function App({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState("");
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const account = authClient.useSession();
   const pathname = usePathname();
   const router = useRouter();
@@ -28,8 +29,13 @@ export function App({ children }: { children: ReactNode }) {
   const setMenuOpen = (open: boolean) => setMenuPath(open ? pathname : null);
   useEffect(() => {
     if (!menuOpen) return;
+    menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus();
     const dismiss = (event: Event) => {
-      if (event instanceof KeyboardEvent ? event.key === "Escape" : !menuRef.current?.contains(event.target as Node)) setMenuPath(null);
+      if (event instanceof KeyboardEvent) {
+        if (event.key !== "Escape") return;
+        setMenuPath(null);
+        menuButtonRef.current?.focus();
+      } else if (!menuRef.current?.contains(event.target as Node)) setMenuPath(null);
     };
     document.addEventListener("pointerdown", dismiss);
     document.addEventListener("keydown", dismiss);
@@ -38,6 +44,16 @@ export function App({ children }: { children: ReactNode }) {
       document.removeEventListener("keydown", dismiss);
     };
   }, [menuOpen]);
+  const moveMenuFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? []);
+    if (!items.length) return;
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    const target = { ArrowDown: (current + 1) % items.length, ArrowUp: (current - 1 + items.length) % items.length, Home: 0, End: items.length - 1 }[event.key];
+    if (target !== undefined) {
+      event.preventDefault();
+      items[target]?.focus();
+    } else if (event.key === "Tab") setMenuOpen(false);
+  };
   const logOut = async () => {
     try {
       await transact(async () => {
@@ -115,8 +131,8 @@ export function App({ children }: { children: ReactNode }) {
         </nav>
         <div className="header-account" ref={menuRef}>
           {account.data ? <>
-            <button className="nav-icon" aria-label="Account" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><UserRound size={22} strokeWidth={1.6} /></button>
-            {menuOpen && <div className="account-menu" role="menu">
+            <button ref={menuButtonRef} className="nav-icon" aria-label="Account" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)} onKeyDown={(event) => { if (event.key === "ArrowDown" && !menuOpen) { event.preventDefault(); setMenuOpen(true); } }}><UserRound size={22} strokeWidth={1.6} /></button>
+            {menuOpen && <div className="account-menu" role="menu" aria-label="Account" tabIndex={-1} onKeyDown={moveMenuFocus}>
               <div className="account-identity">
                 <b>{account.data.user.name}</b>
                 <span>{account.data.user.email}</span>
