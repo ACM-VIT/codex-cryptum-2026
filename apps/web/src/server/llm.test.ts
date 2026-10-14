@@ -59,6 +59,35 @@ it("defaults an absent model to the exact Luna id", async () => {
   expect(sdk.chat).toHaveBeenCalledWith("gpt-6-luna");
 });
 
+it("sends qwen3 the no_think guard without reasoning_effort and strips thinking", async () => {
+  vi.stubEnv("LLM_MODEL", "qwen3:8b");
+  const actualAI = await vi.importActual<typeof import("ai")>("ai");
+  const actualOpenAI = await vi.importActual<typeof import("@ai-sdk/openai")>("@ai-sdk/openai");
+  sdk.generateText.mockImplementation(actualAI.generateText);
+  sdk.createOpenAI.mockImplementation(actualOpenAI.createOpenAI);
+  const fetcher = vi.fn().mockResolvedValue(Response.json({
+    choices: [{ index: 0, message: { role: "assistant", content: "<think>plan</think>\n\nOK" }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+  }));
+  vi.stubGlobal("fetch", fetcher);
+  const history = [{ role: "assistant" as const, content: "Welcome" }];
+  await expect(runModel(1, "CTF{test-only}", history, "hello")).resolves.toBe("OK");
+  const payload = JSON.parse(fetcher.mock.calls[0]?.[1].body);
+  expect(payload.model).toBe("qwen3:8b");
+  expect(payload.reasoning_effort).toBeUndefined();
+  expect(payload.messages).toEqual([
+    { role: "system", content: expect.stringMatching(/ \/no_think$/) },
+    { role: "assistant", content: "Welcome" },
+    { role: "user", content: "hello /no_think" },
+  ]);
+});
+
+it.each(["<think>unfinished", "<think>done</think>   "])("rejects qwen3 output with no answer after thinking (%j)", async (text) => {
+  vi.stubEnv("LLM_MODEL", "qwen3:8b");
+  sdk.generateText.mockResolvedValue({ text, finishReason: "stop" });
+  await expect(runModel(1, "CTF{private}", [], "hello")).rejects.toMatchObject({ status: 503, message: "Model unavailable" });
+});
+
 it.each([2, 3])("preserves level %i system instructions", async (level) => {
   await runModel(level, "CTF{private}", [], "hello");
   const system = sdk.generateText.mock.calls[0]?.[0].instructions;
