@@ -1490,3 +1490,17 @@ h3,
     gap: 12px;
   }
 }
+.challenge-panel-toolbar .challenge-back {
+  white-space: nowrap;
+}
+.label-short {
+  display: none;
+}
+@media (max-width: 640px) {
+  .label-long {
+    display: none;
+  }
+  .label-short {
+    display: inline;
+  }
+}

@@ -117,19 +117,19 @@ function ArenaContent({ id }: { id: number }) {
   return (
     <AnimatedPage className="challenge-page">
       <div className="challenge-panel-toolbar">
-        <Link className="challenge-back" href="/arena">
-          <ArrowLeft size={16} /> Back to challenges
+        <Link className="challenge-back" href="/arena" aria-label="Back to challenges">
+          <ArrowLeft size={16} /> <span className="label-long">Back to challenges</span><span className="label-short">All</span>
         </Link>
         <div className="challenge-pager">
           <nav className="challenge-pager-links" aria-label="Challenge navigation">
             {previous && (
               <Link className="challenge-back" href={`/arena/${previous.id}`} aria-label={`Previous challenge: ${previous.title}`}>
-                <ArrowLeft size={16} /> Previous
+                <ArrowLeft size={16} /> <span className="label-long">Previous</span><span className="label-short">Prev</span>
               </Link>
             )}
             {next && (
               <Link className="challenge-back" href={`/arena/${next.id}`} aria-label={`Next challenge: ${next.title}`}>
-                Next challenge <ArrowRight size={16} />
+                <span className="label-long">Next challenge</span><span className="label-short">Next</span> <ArrowRight size={16} />
               </Link>
             )}
           </nav>
