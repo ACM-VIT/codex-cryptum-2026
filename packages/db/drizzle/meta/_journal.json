@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1792009251452,
+      "tag": "0000_competition",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792009313793,
+      "tag": "0001_google_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792010267150,
+      "tag": "0002_chat_operations",
+      "breakpoints": true
+    }
+  ]
+}
