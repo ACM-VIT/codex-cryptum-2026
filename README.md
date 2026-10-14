@@ -1,63 +1,95 @@
 # Codex Cryptum 2026
 
-This repository currently contains a standalone challenge API for Riya's
-leaderboard, Level 5, and Level 6 components. It uses Python 3.10+ and only the
-standard library. The public leaderboard is served at `/`.
+This repository contains three isolated cybersecurity challenges: a sandbox
+leaderboard, Level 5 exact-match redaction, and Level 6 smart redaction. The
+service uses Python 3.10+ and the standard library. The leaderboard UI is at
+`/`.
 
-## Run locally
+## Start the service
 
-In PowerShell, set participant tokens as a JSON object whose values are the
-team IDs, plus a separate organizer reset token:
+Configure participant bearer tokens as a JSON object mapping a secret token to
+one of the configured sandbox team IDs, and configure a separate organizer
+token from your local secret store. Tokens must be ASCII and at least 16
+characters. Do not commit or print them.
 
 ```powershell
-$env:CRYPTUM_PARTICIPANT_TOKENS='{"local-participant-token":"team-aurora"}'
-$env:CRYPTUM_ORGANIZER_TOKEN='local-organizer-token'
+$env:CRYPTUM_PARTICIPANT_TOKENS = '{"<participant-secret-from-secret-store>":"team-cipher"}'
+$env:CRYPTUM_ORGANIZER_TOKEN = '<organizer-secret-from-secret-store>'
 py -m cryptum
 ```
 
-The development flags are synthetic constants in `cryptum/challenges.py`.
-Replace them with deployment secrets before running a real event. Do not put
-flags or participant/organizer tokens in browser code or logs. The service
-does not log request bodies, authorization headers, or model responses.
+Replace the placeholder values with runtime secrets before starting the
+service; the example values are not usable credentials.
+
+The development flags in `cryptum/challenges.py` are synthetic. For an event,
+inject the real values server-side with `create_server(flags={5: ..., 6: ...})`.
+Never place real flags in frontend assets, API configuration responses, logs,
+or public documentation. The service suppresses request logs and filters
+leaderboard display names before returning them.
+
+## Participant challenge descriptions
+
+- **Sandbox leaderboard:** use browser DevTools to explore the practice
+  leaderboard API, reach first place in the sandbox, then verify completion.
+- **Level 5 — Exact Flag Redaction:** the assistant has a level-specific flag;
+  its output filter blocks the exact flag string. Recover the flag and submit
+  it for server-side verification.
+- **Level 6 — Smart Flag Redaction:** a separate flag is protected against
+  exact, case, separator, reversal, ROT13, URL/HTML, Base64, and hexadecimal
+  forms. Recover it and submit it for server-side verification.
+
+These descriptions state objectives without publishing solution steps.
 
 ## API contract
 
-Participant endpoints use `Authorization: Bearer <participant-token>`. Tokens
-are configured by the trusted deployment/authentication layer in
-`CRYPTUM_PARTICIPANT_TOKENS`. An existing auth gateway can supply its own
-mapping when constructing `create_server`; do not trust a participant ID
-provided directly in an unverified request header. The organizer reset route
-uses the separately configured `CRYPTUM_ORGANIZER_TOKEN`.
+Participant requests use `Authorization: Bearer <participant-token>`. The
+trusted auth integration injects the token-to-team mapping through
+`CRYPTUM_PARTICIPANT_TOKENS` or `create_server(tokens=...)`. Do not trust a
+participant ID supplied by an unverified header. Organizer reset uses the
+separate `CRYPTUM_ORGANIZER_TOKEN`.
 
 | Method | Path | Access | Purpose |
 | --- | --- | --- | --- |
-| GET | `/api/challenge/leaderboard` | public | Ranked, intentionally vulnerable sandbox scores |
-| GET | `/api/competition/leaderboard` | public | Read-only authoritative provider seam |
-| PATCH | `/api/challenge/leaderboard/teams/{team_id}` | participant | Intentionally vulnerable profile/score update |
-| POST | `/api/challenge/leaderboard/reset` | organizer | Restore sandbox seed data and clear awards |
+| GET | `/api/challenge/leaderboard` | public | Ranked sandbox scores and objective |
+| GET | `/api/competition/leaderboard` | public | Read-only authoritative score provider seam |
+| PATCH | `/api/challenge/leaderboard/teams/{team_id}` | participant | Sandbox team update; intentionally vulnerable CTF route |
+| POST | `/api/challenge/leaderboard/complete` | participant | Verify a qualifying sandbox leaderboard exploit |
+| POST | `/api/challenge/leaderboard/reset` | organizer | Restore seed scores and clear challenge state |
 | POST | `/api/challenges/level-5/chat` | participant | Generate and exact-match-filter a Level 5 response |
-| POST | `/api/challenges/level-5/verify` | participant | Verify the Level 5 flag and award points once per team |
+| POST | `/api/challenges/level-5/verify` | participant | Verify Level 5 flag; award points once per team |
 | POST | `/api/challenges/level-6/chat` | participant | Generate and enhanced-filter a Level 6 response |
-| POST | `/api/challenges/level-6/verify` | participant | Verify the Level 6 flag and award points once per team |
+| POST | `/api/challenges/level-6/verify` | participant | Verify Level 6 flag; award points once per team |
 
-Competition results come from a separately injected, read-only
-`competition_entries` provider. The current repository has no competition
-scoring or authentication service, so the included values and token mapping
-are development seams, not production integrations. Challenge team scores
-and award records are persisted in `CRYPTUM_CHALLENGE_DB` (default
-`challenge.sqlite3`) and never write through to the competition provider.
+The chat request body is `{"message":"..."}` and verification body is
+`{"flag":"..."}`. The leaderboard completion endpoint accepts an empty JSON
+object. All challenge writes and awards use the challenge-only SQLite store
+(`CRYPTUM_CHALLENGE_DB`, default `challenge.sqlite3`). They never write to the
+competition score provider.
 
-The LLM adapter contract is `model_provider(level: int, message: str) -> str`.
-The default is a deterministic local challenge model so the APIs work without
-external dependencies. Inject the event's model client through `create_server`;
-the server always applies the selected level's output filter to the returned
-string before sending it to the participant.
+## Integration boundaries
+
+- **Authentication:** no auth service exists in this repository. The
+  injectable token map must come from the trusted event gateway. Use separate
+  participant and organizer secrets; the service rejects weak, non-ASCII, or
+  unknown-team participant mappings.
+- **Competition scoring:** no scoring service exists here. Supply a
+  `competition_entries()` callback (or iterable) from the authoritative
+  read-only scorer. Only team ID,
+  display name, score, and computed rank are returned; challenge writes cannot
+  call this provider.
+- **LLM:** `model_provider(level: int, message: str) -> str` is the adapter
+  contract. A deterministic local provider supports development. The selected
+  server-side filter runs on every provider response before it reaches a
+  participant. Inject real model access and secret-backed flags at startup.
+- **Browser identity:** the standalone UI displays the sandbox board and
+  objective. The event frontend should attach the authenticated participant
+  bearer token when calling mutation, verification, and completion endpoints.
 
 ## Tests
 
-Run `py -m unittest discover -s tests -v`.
+Run `py -m unittest discover -s tests -v` for the full suite.
+Run `py -m compileall -q cryptum tests` for Python compilation checks.
 
-## Organizer materials
-
-Organizer solve notes belong under `docs/organizer/`. Apply repository or
-deployment access controls before sharing this material with participants.
+Organizer solution notes and the Akhand review handoff are local-only,
+Git-ignored files under `docs/`; do not publish them to participant-facing
+spaces.
