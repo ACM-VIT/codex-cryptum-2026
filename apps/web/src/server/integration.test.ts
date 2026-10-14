@@ -13,9 +13,11 @@ vi.mock("./better-auth", () => ({
 }));
 
 import { getDb, closeDb, teams, sessions, messages, submissions, solves, sandboxTeams, exploitEvents, chatOperations } from "@cryptum/db";
-import { and, eq, sql } from "drizzle-orm";
+import { user as authUser } from "@cryptum/db/auth-schema";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { POST as join, GET as session } from "../app/api/session/route";
 import { POST as createTeam } from "../app/api/teams/route";
+import { GET as team } from "../app/api/team/route";
 import { POST as submit } from "../app/api/challenges/[id]/submissions/route";
 import { POST as chat } from "../app/api/challenges/[id]/messages/route";
 import { DELETE as resetConversation } from "../app/api/challenges/[id]/conversation/route";
@@ -131,8 +133,19 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
       expect((await taken.json()).error).toBe("Team name is taken");
       expect((await join(request("session", "POST", { teamName, accessCode: result.accessCode }, teammate, ""))).status).toBe(200);
       expect((await join(request("session", "POST", { teamName, accessCode: "CC-WRONGCODE" }, teammate, ""))).status).toBe(403);
+      await getDb().insert(authUser).values([
+        { id: creator, name: "Creator Person", email: `${creator}@example.test` },
+        { id: teammate, name: "Teammate Person", email: `${teammate}@example.test` },
+      ]);
+      const details = await (await team(request("team", "GET", {}, creator, cookie))).json();
+      expect(details.members).toEqual([
+        { name: "Creator Person", you: true, creator: true },
+        { name: "Teammate Person", you: false, creator: false },
+      ]);
+      expect((await team(request("team", "GET", {}, teammate, cookie))).status).toBe(401);
     } finally {
       await getDb().delete(teams).where(eq(teams.createdBy, creator));
+      await getDb().delete(authUser).where(inArray(authUser.id, [creator, teammate]));
     }
   });
 

@@ -1,7 +1,8 @@
 import "server-only";
 import { getDb, teams, sessions, solves, messages } from "@cryptum/db";
+import { user as authUser } from "@cryptum/db/auth-schema";
 import { and, asc, eq, gt } from "drizzle-orm";
-import { sessionSchema, type Session } from "@cryptum/contracts";
+import { sessionSchema, teamDetailsSchema, type Session, type TeamDetails } from "@cryptum/contracts";
 import { requireGoogleUser } from "./better-auth";
 import { digest, hashAccessCode, newAccessCode, newToken, verifyAccessCode } from "./security";
 import { HttpError } from "./http";
@@ -91,6 +92,16 @@ export async function createTeam(request: Request, teamName: string): Promise<{ 
     return created.id;
   });
   return { token, teamId, accessCode };
+}
+
+export async function teamDetails(request: Request): Promise<TeamDetails> {
+  const viewer = await requireGoogleUser(request.headers);
+  const teamId = await requireTeam(request);
+  const db = getDb();
+  const [team] = await db.select({ createdBy: teams.createdBy }).from(teams).where(eq(teams.id, teamId)).limit(1);
+  const rows = await db.selectDistinct({ id: authUser.id, name: authUser.name }).from(sessions)
+    .innerJoin(authUser, eq(authUser.id, sessions.userId)).where(eq(sessions.teamId, teamId)).orderBy(asc(authUser.name), asc(authUser.id));
+  return teamDetailsSchema.parse({ members: rows.map((row) => ({ name: row.name, you: row.id === viewer.id, creator: row.id === team?.createdBy })) });
 }
 
 export async function leaveTeam(request: Request): Promise<void> {

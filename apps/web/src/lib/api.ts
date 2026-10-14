@@ -5,6 +5,7 @@ import {
   leaderboardSchema,
   sessionSchema,
   submissionSchema,
+  teamDetailsSchema,
   type CtfApi,
 } from "./contracts";
 
@@ -70,6 +71,7 @@ const live: CtfApi = {
     request("/session", sessionSchema, "POST", { teamName, accessCode }),
   createTeam: (teamName) =>
     request("/teams", createdTeamSchema, "POST", { teamName }, [409]),
+  team: () => request("/team", teamDetailsSchema),
   leave: async () => {
     await request("/session", z.object({ ok: z.literal(true) }), "DELETE");
   },
