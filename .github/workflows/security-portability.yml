@@ -1,0 +1,56 @@
+name: Security portability
+
+on:
+  push:
+    paths: ["security/**", "pyproject.toml", "uv.lock", ".github/workflows/security-portability.yml"]
+  pull_request:
+    paths: ["security/**", "pyproject.toml", "uv.lock", ".github/workflows/security-portability.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu-tests:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-24.04, python: "3.11", ml: true}
+          - {os: ubuntu-24.04, python: "3.12", ml: true}
+          - {os: macos-15, python: "3.11", ml: true}
+          - {os: macos-15, python: "3.12", ml: true}
+          - {os: macos-15-intel, python: "3.11", ml: false}
+          - {os: macos-15-intel, python: "3.12", ml: false}
+    env:
+      HF_HUB_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      CUDA_VISIBLE_DEVICES: ""
+      CRYPTUM_CLASSIFIER_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install core and QA dependencies on Intel macOS
+        if: ${{ !matrix.ml }}
+        run: uv sync --locked --extra dev --python ${{ matrix.python }}
+      - name: Install CPU ML runtime on supported architectures (no model weights)
+        if: ${{ matrix.ml }}
+        run: uv sync --locked --extra ml --extra dev --python ${{ matrix.python }}
+      - name: Verify CPU ML imports without downloading weights
+        if: ${{ matrix.ml }}
+        run: uv run --no-sync python -c "import torch; from transformers import AutoModelForSequenceClassification, AutoTokenizer; assert torch.empty(1).device.type == 'cpu'; assert not torch.cuda.is_available(); print(torch.__version__)"
+      - name: Run unit and mock integration tests
+        run: uv run --no-sync python -m pytest -q -m "not integration"
+      - name: Check formatting
+        run: uv run --no-sync ruff check security && uv run --no-sync ruff format --check security
+      - name: Smoke test portable startup
+        run: uv run --no-sync python -m security --mock-classifiers
+      - name: Build importable wheel
+        run: uv build --wheel

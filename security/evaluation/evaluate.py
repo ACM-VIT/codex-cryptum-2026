@@ -1,7 +1,6 @@
 """Reproducible, offline-after-download classifier and optional attack evaluation."""
 
 import argparse
-import asyncio
 import base64
 import json
 import math
@@ -19,6 +18,7 @@ import httpx
 from security import ContextAuthority, FlagService, SecurityPipeline, load_config
 from security.adapters import OllamaClient
 from security.classifiers import MLInputClassifier, MLOutputClassifier
+from security.runtime import load_environment_file, run_cli
 from security.types import TrustedSecurityContext
 
 
@@ -198,8 +198,8 @@ async def evaluate_classifiers() -> dict:
     }
 
 
-async def evaluate_attacks(path: Path, base_url: str) -> list[dict]:
-    attacks = json.loads(path.read_text())
+async def evaluate_attacks(path: Path, base_url: str | None) -> list[dict]:
+    attacks = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(attacks, list) or not all(isinstance(text, str) for text in attacks):
         raise ValueError("Candidate file must contain a JSON list of strings")
     development_flag = fixture_data("sample_outputs.json")["development_flags"]["level7"]
@@ -233,14 +233,17 @@ async def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path, default=Path("evaluation-local.json"))
     parser.add_argument("--candidate-attacks", type=Path)
-    parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    parser.add_argument("--ollama-url", default=None, help="Trusted URL; default OLLAMA_URL")
+    parser.add_argument("--env-file", type=Path)
     args = parser.parse_args()
+    if args.env_file is not None:
+        load_environment_file(args.env_file)
     report = await evaluate_classifiers()
     if args.candidate_attacks:
         report["candidate_attacks"] = await evaluate_attacks(
             args.candidate_attacks, args.ollama_url
         )
-    args.report.write_text(json.dumps(report, indent=2) + "\n")
+    args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(
         f"Wrote organizer-only metrics to {args.report}; "
         "no raw prompts, responses, or flags included."
@@ -256,4 +259,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_cli(main)

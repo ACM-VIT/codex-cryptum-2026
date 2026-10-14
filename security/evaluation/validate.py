@@ -9,8 +9,6 @@ import argparse
 import asyncio
 import json
 import os
-import resource
-import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +19,8 @@ from security import ContextAuthority, FlagService, SecurityPipeline, load_confi
 from security.adapters import OllamaClient
 from security.classifiers.model_loader import HFEngine, get_model_runner
 from security.evaluation.evaluate import fixture_data, metrics, render_output
+from security.evaluation.resources import resource_snapshot
+from security.runtime import load_environment_file, run_cli
 from security.types import InferenceResponse, SecurityError, TrustedSecurityContext
 
 THRESHOLDS = (0.65, 0.70, 0.75, 0.80, 0.85)
@@ -33,40 +33,6 @@ def latency_summary(values: list[float]) -> dict:
         for i, value in enumerate(values)
     ]
     return {"count": len(values), **metrics(rows, 0.75)["latency_ms"]}
-
-
-def resource_snapshot() -> dict:
-    """Process RSS and sampled global GPU usage; not a claim of GPU peak attribution."""
-    rss_bytes = None
-    try:
-        for line in Path("/proc/self/status").read_text().splitlines():
-            if line.startswith("VmRSS:"):
-                rss_bytes = int(line.split()[1]) * 1024
-                break
-    except (OSError, ValueError):
-        pass
-    gpu = None
-    try:
-        process = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=name,memory.total,memory.used",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=True,
-        )
-        name, total, used = process.stdout.strip().split(",")
-        gpu = {"name": name.strip(), "total_mib": int(total), "used_mib": int(used)}
-    except (OSError, ValueError, subprocess.SubprocessError):
-        pass
-    return {
-        "rss_bytes": rss_bytes,
-        "process_max_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024,
-        "gpu_global_sample": gpu,
-    }
 
 
 class ObservedClassifier:
@@ -116,7 +82,7 @@ class FixtureInference:
         return InferenceResponse(self.content)
 
 
-async def validate(*, run_ollama: bool) -> dict:
+async def validate(*, run_ollama: bool, ollama_url: str | None = None) -> dict:
     report = {
         "started_at_utc": datetime.now(UTC).isoformat(),
         "scope": "Defensive QA only; no new exploits or candidate-attack harness",
@@ -307,16 +273,12 @@ async def validate(*, run_ollama: bool) -> dict:
     if run_ollama:
         try:
             async with httpx.AsyncClient() as http:
-                response = await http.get("http://127.0.0.1:11434/api/tags", timeout=5)
-                response.raise_for_status()
-                names = {model["name"] for model in response.json()["models"]}
-            if "qwen3:8b" not in names:
-                raise ValueError("missing model")
+                await OllamaClient(http, ollama_url).check_available(load_config(7).model)
         except Exception:
-            report["ollama"]["reason"] = "Local Ollama or qwen3:8b unavailable"
+            report["ollama"]["reason"] = "Configured Ollama endpoint or model unavailable"
         else:
             async with httpx.AsyncClient() as http:
-                client = OllamaClient(http)
+                client = OllamaClient(http, ollama_url)
                 report["ollama"]["tested"] = True
                 for level in (7, 8):
                     for team in TEAMS:
@@ -434,13 +396,17 @@ async def validate(*, run_ollama: bool) -> dict:
 async def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ollama", action="store_true", help="Run benign requests only")
+    parser.add_argument("--ollama-url", default=None, help="Trusted server URL; default OLLAMA_URL")
+    parser.add_argument("--env-file", type=Path)
     parser.add_argument("--report", type=Path, default=Path("evaluation-local-validation.json"))
     args = parser.parse_args()
+    if args.env_file is not None:
+        load_environment_file(args.env_file)
     os.environ["HF_HUB_OFFLINE"] = "1"
-    report = await validate(run_ollama=args.ollama)
-    args.report.write_text(json.dumps(report, indent=2) + "\n")
+    report = await validate(run_ollama=args.ollama, ollama_url=args.ollama_url)
+    args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote defensive QA evidence: {args.report}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_cli(main)

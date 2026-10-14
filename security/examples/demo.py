@@ -1,9 +1,8 @@
 """Levels 7/8 with real classifiers and mock inference, or optional local Ollama."""
 
 import argparse
-import asyncio
-import os
 import secrets
+from pathlib import Path
 
 import httpx
 
@@ -11,6 +10,7 @@ from security import ContextAuthority, FlagService, SecurityPipeline, load_confi
 from security.adapters import OllamaClient
 from security.classifiers.output_classifier import supplementary_match
 from security.evaluation.evaluate import fixture_data
+from security.runtime import load_environment_file, run_cli
 from security.types import InferenceResponse, InputClassification, OutputClassification
 
 
@@ -39,9 +39,14 @@ async def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ollama", action="store_true")
     parser.add_argument(
+        "--env-file", type=Path, help="Explicit trusted .env file; no shell required"
+    )
+    parser.add_argument(
         "--mock-classifiers", action="store_true", help="Wiring only; not ML evaluation"
     )
     args = parser.parse_args()
+    if args.env_file is not None:
+        load_environment_file(args.env_file)
     if args.ollama and args.mock_classifiers:
         parser.error("Ollama demonstration requires real classifiers")
     development_flag = fixture_data("sample_outputs.json")["development_flags"]["level7"]
@@ -76,11 +81,9 @@ async def main():
         not authority.flag_service.validate_team_flag("demo-a", 8, flag_b),
     )
     async with httpx.AsyncClient() as http:
-        inference = (
-            OllamaClient(http, os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"))
-            if args.ollama
-            else MockInference()
-        )
+        inference = OllamaClient(http) if args.ollama else MockInference()
+        if args.ollama:
+            await inference.check_available(load_config(7).model)
         for level in (7, 8):
             for message in (
                 "Explain how neural networks work.",
@@ -103,4 +106,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_cli(main)

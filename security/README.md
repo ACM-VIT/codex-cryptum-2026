@@ -59,33 +59,86 @@ texts. The output hypothesis consumes part of each window. A maximum over window
 can increase false positives on long content and can miss dependencies spanning
 windows. Tokenization does not decode arbitrary attacker encodings.
 
-## Installation on Arch Linux with fish
+## Portable installation on Linux and macOS
 
-Run all commands from the repository root. Python 3.12 is recommended and was used
-for validation; the package declares Python 3.11–3.14 compatibility. The system
-Python was 3.14, but an existing 3.12 installation was used for ML dependency stability.
+Run commands from the repository root. **Python 3.11 and 3.12 are the supported
+range**, with 3.12 recommended for local ML inference. Dependencies are installed in
+a virtual environment; the system Python and shell can differ from the application.
+No shell activation, Bash functions, Fish syntax, Docker, or NVIDIA hardware is required.
+Local real-model testing has been performed on Arch Linux; other platform results
+must be confirmed by the new CI matrix or hardware testing. See
+[PORTABILITY_REPORT.md](PORTABILITY_REPORT.md).
 
-```fish
-# Only if uv is not already installed:
-sudo pacman -S --needed uv
+If uv is already installed, the setup is the same on Linux and Apple Silicon macOS:
+
+```text
 uv python install 3.12
-uv sync --python 3.12 --extra ml --extra dev
+uv sync --locked --python 3.12 --extra ml --extra dev
+uv run --no-sync python -m security --mock-classifiers
+uv run --no-sync python -m pytest -q -m "not integration"
 ```
 
-`uv.lock` pins resolved versions. The PyTorch index is explicitly CPU-only. Core
-integration without ML weights/dependencies can use `uv sync --python 3.12 --extra dev`
-and injected test classifiers. Alternatively:
+On **Linux** (Arch, Ubuntu, Debian, Fedora), uv's managed Python avoids distribution
+default-version differences. Install uv using your distribution's package manager,
+or bootstrap it into a virtual environment with an available Python 3 interpreter:
 
-```fish
+```text
+python3 -m venv .bootstrap
+.bootstrap/bin/python -m pip install uv
+.bootstrap/bin/uv python install 3.12
+.bootstrap/bin/uv sync --locked --python 3.12 --extra ml --extra dev
+```
+
+If the distribution separates venv tooling, install it first: Ubuntu/Debian commonly
+use `sudo apt install python3-venv python3-pip`; Fedora uses
+`sudo dnf install python3 python3-pip`; Arch uses `sudo pacman -S python python-pip`.
+These package-manager commands are optional host prerequisites, not application
+runtime dependencies. Ubuntu, Debian, and Fedora execution is not claimed as tested
+on this laptop.
+
+On **macOS Apple Silicon**, use native arm64 Python rather than a Rosetta x86 process.
+Homebrew users can install uv with `brew install uv` and use the shared commands
+above. A Python.org installation can also run the bootstrap sequence. The lockfile
+selects the native PyPI torch wheel on macOS and the CPU-only index on Linux.
+
+On **macOS Intel**, the core package, configuration, flag services, injected-client
+interfaces, unit tests, and explicit wiring demo have a dependency-compatible path:
+
+```text
+uv python install 3.12
+uv sync --locked --python 3.12 --extra dev
+uv run --no-sync python -m pytest -q -m "not integration"
+uv run --no-sync python -m security --mock-classifiers
+```
+
+**Intel macOS cannot currently install the pinned local ML runtime from official
+prebuilt torch wheels.** PyTorch ended macOS x86_64 wheel support after 2.2.x; the
+project retains 2.9.1 and does not silently downgrade. A compatible same-version
+source build or a backend with injected trusted classifiers running on a supported
+machine is needed for real protected execution. This package does not implement a
+classifier server. With missing ML dependencies, real classifier execution fails
+closed; the mock demo is explicitly labeled and cannot be combined with Ollama.
+
+A supported Python already installed on Linux or Apple Silicon can use pip:
+
+```text
 python3.12 -m venv .venv
-source .venv/bin/activate.fish
-python -m pip install -r security/requirements.txt
+.venv/bin/python -m pip install -r security/requirements.txt
+.venv/bin/python -m security --mock-classifiers
 ```
 
-The pip path pins the direct dependencies but does not reproduce every transitive
-version; use `uv sync --locked --extra ml --extra dev` for the complete lock.
-The package uses PyTorch 2.9.1+cpu, Transformers 4.57.6, Pydantic 2.12.5,
-PyYAML 6.0.3, and HTTPX 0.28.1. Test/format tools are pytest, pytest-asyncio, and Ruff.
+Pip pins direct dependencies but does not consume uv's complete transitive lock;
+uv is the reproducible setup path. Required dependencies contain no torch or GPU
+packages. The optional `ml` group supplies CPU classifier inference; the optional
+`dev` group supplies pytest, Ruff, and psutil for resource measurements. No Python
+CUDA/ROCm packages are required or automatically installed on Linux. GPU acceleration
+for Qwen is owned by Ollama, which selects supported hardware or CPU at the hosting
+machine. Classifiers intentionally stay on CPU on all platforms to preserve existing
+policy behavior and leave accelerator memory for Qwen.
+
+The runtime keeps Transformers 4.57.6 and torch 2.9.1 (Linux `+cpu` variant), plus
+the existing core dependency versions. Python-dotenv 1.2.4 handles explicit startup
+files; psutil 7.2.2 is optional QA tooling. Model weights and revisions are unchanged.
 Initial classifier use downloads the pinned artifacts; warm models before opening
 the competition. First-time downloads may exceed request timeouts and then fail closed.
 Once artifacts exist, use `set -gx HF_HUB_OFFLINE 1` for offline inference.
@@ -93,7 +146,11 @@ Once artifacts exist, use `set -gx HF_HUB_OFFLINE 1` for offline inference.
 ## Trusted environment configuration
 
 `security/.env.example` contains placeholders. The module does **not** automatically
-load `.env`; the host must inject environment variables or pass explicit services.
+discover `.env`. The host can inject environment variables, pass services explicitly,
+or opt into the portable startup loader using `--env-file`. Existing process variables
+take precedence over file values. Parsing uses UTF-8, accepts only the documented
+keys, performs no variable interpolation or shell execution, and rejects malformed
+files without printing their contents.
 Never commit the master key or real flags.
 
 | Variable | Purpose |
@@ -101,12 +158,35 @@ Never commit the master key or real flags.
 | `CRYPTUM_FLAG_MASTER_SECRET_HEX` | Required for Level 8: random secret of at least 32 bytes, hex encoded |
 | `CRYPTUM_FLAG_ROTATION` | Stable competition epoch; default `2026-event-v1`; change explicitly to rotate flags |
 | `CRYPTUM_LEVEL7_FLAG` | Trusted Level 7 flag; no production-code default |
-| `OLLAMA_URL` | Demo's trusted internal endpoint; default `http://127.0.0.1:11434` |
+| `OLLAMA_URL` | Trusted endpoint used by adapter and CLIs; default `http://127.0.0.1:11434` |
+| `OLLAMA_MODEL` | Trusted model override for both challenge configs; default YAML `qwen3:8b` |
 | `CRYPTUM_CLASSIFIER_THREADS` | Process-wide CPU intra-op thread count, 1–32; default 2 |
 | `HF_HOME` | Optional model cache outside the repository |
+| `CRYPTUM_MODEL_CACHE` | Optional dedicated pretrained-artifact cache; `~` expands portably |
 | `HF_HUB_OFFLINE` | Optional cached-artifact-only loading |
 
-For local development in fish:
+Portable local startup, with no shell-specific environment assignment:
+
+```text
+uv run --no-sync python -m security --mock-classifiers --env-file security/.env.example
+uv run --no-sync python -m security --ollama --env-file security/.env.example
+```
+
+The demonstration always uses ephemeral development contexts; it does not use the
+file's master key or Level 7 placeholder as production secrets. For real backend
+configuration, copy the example locally, replace secret placeholders privately, and
+call `load_environment_file(Path(".env"))` from `security.runtime` before creating
+`ContextAuthority.from_environment()`. Never pass participant-controlled files.
+
+To connect to another hosting machine, set `OLLAMA_URL` in that trusted file, for
+example `https://inference.example.test/ollama`, and set `OLLAMA_MODEL` to the model
+available there. URL credentials/query strings/fragments are rejected; use an
+application-owned authenticated HTTP client when required. Keep the hosting endpoint
+and trusted configuration server-side. This repository does not configure a remote
+Ollama server or expose participant-facing proxy routes.
+
+The following remains an optional Fish-specific development example; it is not
+required for startup:
 
 ```fish
 set -gx CRYPTUM_FLAG_MASTER_SECRET_HEX (uv run python -c 'import secrets; print(secrets.token_hex(32))')

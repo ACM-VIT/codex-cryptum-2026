@@ -9,6 +9,7 @@ import os
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from security.config import ClassifierConfig, valid_score
 from security.types import SecurityError
@@ -21,14 +22,19 @@ class HFEngine:
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
         self.torch = torch
+        cache = os.environ.get("CRYPTUM_MODEL_CACHE")
+        if cache is not None and not cache.strip():
+            raise SecurityError("classifier_unavailable")
+        cache_options = {"cache_dir": str(Path(cache).expanduser())} if cache is not None else {}
         self.tokenizer = AutoTokenizer.from_pretrained(
-            config.model_id, revision=config.revision, trust_remote_code=False
+            config.model_id, revision=config.revision, trust_remote_code=False, **cache_options
         )
         self.model = AutoModelForSequenceClassification.from_pretrained(
             config.model_id,
             revision=config.revision,
             trust_remote_code=False,
             use_safetensors=True,
+            **cache_options,
         ).to("cpu")
         self.model.eval()
         self.labels = {str(v).lower(): int(k) for k, v in self.model.config.id2label.items()}

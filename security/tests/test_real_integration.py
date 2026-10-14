@@ -107,15 +107,17 @@ async def test_real_classifier_concurrency_fails_closed_and_recovers(real_pipeli
 
 @pytest.fixture(scope="module")
 def available_ollama():
-    base_url = "http://127.0.0.1:11434"
+    base_url = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
     try:
         response = httpx.get(f"{base_url}/api/tags", timeout=5)
         response.raise_for_status()
         names = {model["name"] for model in response.json()["models"]}
     except Exception:
         pytest.skip("Local Ollama unavailable; real classifier tests remain independent")
-    if "qwen3:8b" not in names:
-        pytest.skip("qwen3:8b unavailable locally")
+    model = load_config(7).model
+    tagged = model if ":" in model.rsplit("/", 1)[-1] else f"{model}:latest"
+    if model not in names and tagged not in names:
+        pytest.skip("Configured Ollama model unavailable")
     return base_url
 
 

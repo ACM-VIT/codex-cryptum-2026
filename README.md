@@ -22,18 +22,24 @@ pyproject.toml   Package, dependencies, lint and test configuration
 uv.lock          Reproducible dependencies, including CPU PyTorch
 ```
 
-From the repository root, using Arch Linux and fish:
+Supported Python versions are **3.11 and 3.12**. From the repository root, with uv
+installed, these shell-independent commands target Linux and Apple Silicon macOS
+(macOS validation is pending CI):
 
-```fish
-uv sync --python 3.12 --extra ml --extra dev
+```text
+uv sync --locked --python 3.12 --extra ml --extra dev
 uv run python -m pytest -q
 uv run ruff check security
 uv run ruff format --check security
 uv build --wheel
-uv run python -m security.examples.demo --mock-classifiers
+uv run python -m security --mock-classifiers
 ```
 
 The last command uses explicit classifier fixtures to test wiring without downloaded
 models. Remove `--mock-classifiers` to use the real classifiers; add `--ollama` to use
 the locally installed `qwen3:8b`. See the package README for evaluation and production
-configuration. No commits or pushes are performed by these commands.
+configuration. Native local ML dependencies are available for Linux and Apple Silicon;
+Intel macOS can install the core/QA package with `--extra dev` and has an upstream
+PyTorch wheel limitation. See [portability findings and tested platforms](security/PORTABILITY_REPORT.md)
+and [Linux/macOS setup](security/README.md#portable-installation-on-linux-and-macos).
+No commits or pushes are performed by these commands.

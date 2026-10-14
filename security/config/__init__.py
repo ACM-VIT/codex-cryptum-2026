@@ -1,6 +1,7 @@
 """Validated organizer configuration, never participant-supplied configuration."""
 
 import math
+import os
 import re
 from importlib.resources import files
 from pathlib import Path
@@ -43,7 +44,7 @@ class SecurityConfig(StrictConfig):
 
 class ChallengeConfig(StrictConfig):
     challenge_id: Literal[7, 8]
-    model: str = Field(default="qwen3:8b", min_length=1, max_length=128)
+    model: str = Field(default="qwen3:8b", pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
     prompt_template: Literal["vault_v1"] = "vault_v1"
     max_input_chars: int = Field(default=6000, ge=1, le=16000)
     max_output_chars: int = Field(default=16000, ge=1, le=64000)
@@ -100,6 +101,8 @@ def load_config(challenge_id: int, path: Path | None = None) -> ChallengeConfig:
                 rule["action"] = Action(rule["action"])
         if "allowed_roles" in data:
             data["allowed_roles"] = tuple(data["allowed_roles"])
+        if "OLLAMA_MODEL" in os.environ:
+            data["model"] = os.environ["OLLAMA_MODEL"]
         config = ChallengeConfig.model_validate(data)
         if config.challenge_id != challenge_id:
             raise ValueError("Mismatched challenge")
