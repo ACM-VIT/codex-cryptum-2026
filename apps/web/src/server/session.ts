@@ -3,7 +3,7 @@ import { getDb, teams, sessions, solves, messages } from "@cryptum/db";
 import { and, asc, eq, gt } from "drizzle-orm";
 import { sessionSchema, type Session } from "@cryptum/contracts";
 import { requireGoogleUser } from "./better-auth";
-import { digest, newToken, verifyAccessCode } from "./security";
+import { digest, hashAccessCode, newAccessCode, newToken, verifyAccessCode } from "./security";
 import { HttpError } from "./http";
 
 const COOKIE = process.env.NODE_ENV === "production" ? "__Host-cryptum-team" : "cryptum-team";
@@ -73,6 +73,24 @@ export async function joinTeam(request: Request, teamName: string, accessCode: s
     await tx.insert(sessions).values({ userId: user.id, teamId: team.id, tokenHash: digest(token), expiresAt: new Date(Date.now() + SESSION_SECONDS * 1000) });
   });
   return { token, teamId: team.id };
+}
+
+export async function createTeam(request: Request, teamName: string): Promise<{ token: string; teamId: string; accessCode: string }> {
+  const user = await requireGoogleUser(request.headers);
+  joinLimit(user.id);
+  const accessCode = newAccessCode();
+  const accessCodeHash = await hashAccessCode(accessCode);
+  const token = newToken();
+  const teamId = await getDb().transaction(async (tx) => {
+    const [created] = await tx.insert(teams).values({ name: teamName, accessCodeHash, createdBy: user.id }).onConflictDoNothing().returning({ id: teams.id });
+    if (!created) {
+      const [owned] = await tx.select({ id: teams.id }).from(teams).where(eq(teams.createdBy, user.id)).limit(1);
+      throw new HttpError(409, owned ? "You have already created a team" : "Team name is taken");
+    }
+    await tx.insert(sessions).values({ userId: user.id, teamId: created.id, tokenHash: digest(token), expiresAt: new Date(Date.now() + SESSION_SECONDS * 1000) });
+    return created.id;
+  });
+  return { token, teamId, accessCode };
 }
 
 export async function leaveTeam(request: Request): Promise<void> {

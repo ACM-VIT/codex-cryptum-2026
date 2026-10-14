@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   challengeSchema,
+  createdTeamSchema,
   leaderboardSchema,
   sessionSchema,
   submissionSchema,
@@ -23,6 +24,7 @@ async function request<T>(
   schema: z.ZodType<T>,
   method = "GET",
   data?: unknown,
+  serverMessages: number[] = [],
 ): Promise<T> {
   let response: Response;
   try {
@@ -37,6 +39,10 @@ async function request<T>(
     throw new ApiError("Connection lost. Check your connection and try again.");
   }
   if (!response.ok) {
+    if (serverMessages.includes(response.status)) {
+      const detail = await response.json().then((value) => z.object({ error: z.string() }).parse(value).error).catch(() => null);
+      if (detail) throw new ApiError(detail, response.status);
+    }
     const messages: Record<number, string> = {
       401: "Your session has expired. Rejoin your team to continue.",
       403: "Access denied. Check your team access code.",
@@ -62,6 +68,8 @@ const live: CtfApi = {
   session: () => request("/session", sessionSchema.nullable()),
   join: (teamName, accessCode) =>
     request("/session", sessionSchema, "POST", { teamName, accessCode }),
+  createTeam: (teamName) =>
+    request("/teams", createdTeamSchema, "POST", { teamName }, [409]),
   leave: async () => {
     await request("/session", z.object({ ok: z.literal(true) }), "DELETE");
   },

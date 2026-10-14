@@ -16,6 +16,12 @@ export const sessionSchema = z.object({
   conversations: z.record(z.string(), z.array(messageSchema)),
 });
 export type Session = z.infer<typeof sessionSchema>;
+export const teamNameSchema = z.string().trim().min(2).max(32).regex(/^[^\p{C}]+$/u);
+export const createdTeamSchema = z.object({
+  session: sessionSchema,
+  accessCode: z.string(),
+});
+export type CreatedTeam = z.infer<typeof createdTeamSchema>;
 export const challengeSchema = z.object({
   id: challengeIdSchema,
   title: z.string(),
@@ -56,6 +62,7 @@ export type AuthConfiguration = z.infer<typeof authConfigurationSchema>;
 export interface CtfApi {
   session(): Promise<Session | null>;
   join(teamName: string, accessCode: string): Promise<Session>;
+  createTeam(teamName: string): Promise<CreatedTeam>;
   leave(): Promise<void>;
   challenges(): Promise<Challenge[]>;
   chat(id: number, content: string): Promise<Session>;

@@ -10,6 +10,15 @@ export function equalSecret(actual: string, expected: string): boolean {
   return timingSafeEqual(Buffer.from(digest(actual), "hex"), Buffer.from(digest(expected), "hex"));
 }
 
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const newAccessCode = () => `CC-${Array.from(randomBytes(10), (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join("")}`;
+
+export async function hashAccessCode(code: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const derived = await scrypt(code, salt, 64) as Buffer;
+  return `${salt}:${derived.toString("hex")}`;
+}
+
 export async function verifyAccessCode(code: string, stored: string): Promise<boolean> {
   const match = /^([a-f0-9]{32,128}):([a-f0-9]{128})$/i.exec(stored);
   // Run scrypt even for an unknown team / invalid stored hash.
