@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowUpRight, CheckCircle2, LogOut, Home, LayoutGrid, Trophy, UserRound, LogIn } from "lucide-react";
+import { CheckCircle2, LogOut, Home, LayoutGrid, Trophy, UserRound, LogIn, Users } from "lucide-react";
 import { api } from "./lib/api";
+import { authClient } from "./lib/auth-client";
 import type { Challenge, Session } from "./lib/contracts";
 import { AppContext } from "./lib/context";
 import { KeyholeMark } from "./components/keyhole-mark";
-import { Dialog, ErrorNotice } from "./components/ui";
+import { ErrorNotice } from "./components/ui";
 
 export function App({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -18,10 +19,38 @@ export function App({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const [toast, setToast] = useState("");
-  const [teamPath, setTeamPath] = useState<string | null>(null);
-  const [leaving, setLeaving] = useState(false);
+  const [menuPath, setMenuPath] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const account = authClient.useSession();
   const pathname = usePathname();
   const router = useRouter();
+  const menuOpen = menuPath === pathname;
+  const setMenuOpen = (open: boolean) => setMenuPath(open ? pathname : null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const dismiss = (event: Event) => {
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !menuRef.current?.contains(event.target as Node)) setMenuPath(null);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", dismiss);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", dismiss);
+    };
+  }, [menuOpen]);
+  const logOut = async () => {
+    try {
+      await transact(async () => {
+        if (session) await api.leave();
+        await authClient.signOut();
+      });
+      setSession(null);
+      setMenuOpen(false);
+      router.push("/");
+    } catch (e) {
+      setToast((e as Error).message);
+    }
+  };
   const load = async () => {
     setLoading(true);
     setError("");
@@ -77,32 +106,33 @@ export function App({ children }: { children: ReactNode }) {
             { href: "/", label: "Home", Icon: Home },
             { href: "/arena", label: "Challenges", Icon: LayoutGrid },
             { href: "/leaderboard", label: "Leaderboard", Icon: Trophy },
+            ...(session ? [{ href: "/team", label: "My team", Icon: Users }] : []),
           ].map(({ href, label, Icon }) => (
             <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined} aria-label={label} className={`nav-icon ${pathname === href ? "active" : ""}`}>
               <Icon size={22} strokeWidth={1.6} /><span className="nav-tooltip" aria-hidden="true">{label}</span>
             </Link>
           ))}
-          {session ? <button className="nav-icon" aria-label="Account" onClick={() => setTeamPath(pathname)}><UserRound size={22} strokeWidth={1.6} /><span className="nav-tooltip" aria-hidden="true">Account</span></button>
-            : <Link href="/join" className="nav-icon" aria-label="Sign in"><LogIn size={22} strokeWidth={1.6} /><span className="nav-tooltip" aria-hidden="true">Sign in</span></Link>}
         </nav>
+        <div className="header-account" ref={menuRef}>
+          {account.data ? <>
+            <button className="nav-icon" aria-label="Account" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><UserRound size={22} strokeWidth={1.6} /></button>
+            {menuOpen && <div className="account-menu" role="menu">
+              <div className="account-identity">
+                <b>{account.data.user.name}</b>
+                <span>{account.data.user.email}</span>
+              </div>
+              {session ? <Link role="menuitem" href="/team" onClick={() => setMenuOpen(false)}><Users size={16} /> My team</Link>
+                : <Link role="menuitem" href="/join" onClick={() => setMenuOpen(false)}><Users size={16} /> Join or create a team</Link>}
+              <button role="menuitem" disabled={busy} onClick={logOut}><LogOut size={16} /> Log out</button>
+            </div>}
+          </> : !account.isPending && <Link href="/join" className="nav-icon" aria-label="Sign in"><LogIn size={22} strokeWidth={1.6} /><span className="nav-tooltip" aria-hidden="true">Sign in</span></Link>}
+        </div>
       </header>
       <main id="main" tabIndex={-1}>
         {loading ? <div className="loading-page"><span className="loader" /><p>Opening the vault…</p></div>
           : error ? <div className="page"><h1>Connection interrupted</h1><ErrorNotice message={error} retry={load} /></div> : children}
       </main>
       <output className={`toast ${toast ? "visible" : ""}`} aria-live="polite">{toast && <><CheckCircle2 size={18} /><span>{toast}</span></>}</output>
-      {teamPath === pathname && session && <Dialog title={session.teamName} onClose={() => setTeamPath(null)}>
-        <div className="team-summary"><span>{session.solved.length} / 10 flags</span><span>{session.score.toLocaleString()} pts</span></div>
-        <p>Your competition team.</p>
-        <div className="dialog-actions"><Link href="/arena" className="button">Challenges <ArrowUpRight size={16} /></Link><button className="button button-outline" disabled={busy} onClick={() => { setTeamPath(null); setLeaving(true); }}><LogOut size={16} /> Leave team</button></div>
-      </Dialog>}
-      {leaving && <Dialog title="Leave this team?" onClose={() => setLeaving(false)}>
-        <p>You will be signed out. Your team’s server progress will be preserved.</p>
-        <div className="dialog-actions"><button className="button button-outline" onClick={() => setLeaving(false)}>Stay here</button><button className="button" disabled={busy} onClick={async () => {
-          try { await transact(() => api.leave()); setSession(null); setLeaving(false); router.push("/join"); }
-          catch (e) { setToast((e as Error).message); }
-        }}>Leave team</button></div>
-      </Dialog>}
     </AppContext.Provider>
   );
 }
