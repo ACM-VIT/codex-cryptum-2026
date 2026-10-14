@@ -1465,3 +1465,28 @@ h3,
     align-items: stretch;
   }
 }
+.challenge-pager {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.challenge-pager-links {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.challenge-pager-links .challenge-back {
+  margin: 0;
+}
+.challenge-next {
+  margin-top: 16px;
+  display: inline-flex;
+}
+@media (max-width: 640px) {
+  .challenge-pager-links .challenge-back {
+    font-size: 12px;
+  }
+  .challenge-pager {
+    gap: 12px;
+  }
+}
