@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Copy, LogOut } from "lucide-react";
+import { ArrowUpRight, Copy, LogOut, Pencil } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { AnimatedPage, Dialog, ErrorNotice } from "../components/ui";
 import { useApp } from "../lib/context";
 import { api, ApiError } from "../lib/api";
@@ -13,6 +14,9 @@ export function TeamPage() {
   const [details, setDetails] = useState<TeamDetails | null>(null);
   const [error, setError] = useState("");
   const [leaving, setLeaving] = useState<"member" | "last" | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [renameError, setRenameError] = useState("");
   const teamId = session?.id;
   useEffect(() => {
     if (!teamId) return;
@@ -31,6 +35,17 @@ export function TeamPage() {
     );
   }
   const solved = challenges.filter((challenge) => session.solved.includes(challenge.id));
+  const saveName = async (event: FormEvent) => {
+    event.preventDefault();
+    setRenameError("");
+    try {
+      setSession(await transact(() => api.renameTeam(newName.trim())));
+      setRenaming(false);
+      toast("Team renamed.");
+    } catch (e) {
+      setRenameError((e as Error).message);
+    }
+  };
   const copyCode = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -63,10 +78,25 @@ export function TeamPage() {
   return (
     <AnimatedPage className="page team-page">
       <div className="page-heading">
-        <div>
-          <h1>{session.teamName}</h1>
-          <p>Your competition team.</p>
-        </div>
+        {renaming ? (
+          <form className="team-rename" onSubmit={saveName}>
+            <label htmlFor="team-rename">Team name</label>
+            <div className="team-rename-row">
+              <Input id="team-rename" size="lg" value={newName} onChange={(event) => setNewName(event.target.value)} minLength={2} maxLength={32} autoComplete="organization" required />
+              <button className="button" disabled={busy || !newName.trim()}>Save</button>
+              <button type="button" className="button button-outline" onClick={() => { setRenaming(false); setRenameError(""); }}>Cancel</button>
+            </div>
+            {renameError && <ErrorNotice message={renameError} />}
+          </form>
+        ) : (
+          <div>
+            <h1>{session.teamName}</h1>
+            <p>Your competition team.</p>
+          </div>
+        )}
+        {details?.canRename && !renaming && (
+          <button type="button" className="button button-outline button-small" onClick={() => { setNewName(session.teamName); setRenaming(true); }}><Pencil size={14} /> Rename</button>
+        )}
       </div>
       <div className="leaderboard-stats">
         <div>

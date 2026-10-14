@@ -103,7 +103,7 @@ export function Join() {
             <>
               <label htmlFor="team-name">Team name</label>
               <Input id="team-name" size="lg" value={teamName} onChange={(event) => setTeamName(event.target.value)} placeholder="e.g. The Unprompted" minLength={2} maxLength={32} autoComplete="organization" required />
-              <span className="field-help">This name appears on the leaderboard and can't be changed later.</span>
+              <span className="field-help">This name appears on the leaderboard. You can rename it later from My team.</span>
             </>
           ) : (
             <>

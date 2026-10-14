@@ -1504,3 +1504,35 @@ h3,
     display: inline;
   }
 }
+.team-page .page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.team-rename {
+  flex: 1;
+  max-width: 640px;
+}
+.team-rename label {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.team-rename-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.team-rename-row > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .team-page .page-heading,
+  .team-rename-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

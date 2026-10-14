@@ -72,6 +72,8 @@ const live: CtfApi = {
   createTeam: (teamName) =>
     request("/teams", createdTeamSchema, "POST", { teamName }, [409]),
   team: () => request("/team", teamDetailsSchema),
+  renameTeam: (teamName) =>
+    request("/team", sessionSchema, "PATCH", { teamName }, [403, 409]),
   leave: (confirmDelete = false) =>
     request("/session", z.object({ ok: z.literal(true), deleted: z.boolean() }), "DELETE", { confirmDelete }, [409]),
   logout: async () => {

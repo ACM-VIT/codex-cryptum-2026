@@ -18,7 +18,7 @@ import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { POST as join, GET as session, DELETE as leave } from "../app/api/session/route";
 import { POST as logout } from "../app/api/session/logout/route";
 import { POST as createTeam } from "../app/api/teams/route";
-import { GET as team } from "../app/api/team/route";
+import { GET as team, PATCH as renameRoute } from "../app/api/team/route";
 import { POST as submit } from "../app/api/challenges/[id]/submissions/route";
 import { POST as chat } from "../app/api/challenges/[id]/messages/route";
 import { DELETE as resetConversation } from "../app/api/challenges/[id]/conversation/route";
@@ -132,7 +132,9 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
       const taken = await createTeam(request("teams", "POST", { teamName }, teammate, ""));
       expect(taken.status).toBe(409);
       expect((await taken.json()).error).toBe("Team name is taken");
-      expect((await join(request("session", "POST", { accessCode: ` ${result.accessCode.toLowerCase()} ` }, teammate, ""))).status).toBe(200);
+      const teammateJoin = await join(request("session", "POST", { accessCode: ` ${result.accessCode.toLowerCase()} ` }, teammate, ""));
+      expect(teammateJoin.status).toBe(200);
+      const [teammateCookie] = teammateJoin.headers.get("set-cookie")?.split(";") ?? [];
       expect((await join(request("session", "POST", { accessCode: "CC-WRONGCODE" }, teammate, ""))).status).toBe(403);
       await getDb().insert(authUser).values([
         { id: creator, name: "Creator Person", email: `${creator}@example.test` },
@@ -146,6 +148,13 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
         { name: "Teammate Person", you: false, creator: false },
       ]);
       expect((await team(request("team", "GET", {}, teammate, cookie))).status).toBe(401);
+      expect(details.canRename).toBe(true);
+      expect((await (await team(request("team", "GET", {}, teammate, teammateCookie))).json()).canRename).toBe(false);
+      expect((await renameRoute(request("team", "PATCH", { teamName: `${teamName} by mate` }, teammate, teammateCookie))).status).toBe(403);
+      expect((await renameRoute(request("team", "PATCH", { teamName: `${teamName} 2` }, creator, cookie))).status).toBe(409);
+      const renamed = await renameRoute(request("team", "PATCH", { teamName: `${teamName} renamed` }, creator, cookie));
+      expect(renamed.status).toBe(200);
+      expect((await renamed.json()).teamName).toBe(`${teamName} renamed`);
     } finally {
       await getDb().delete(teams).where(eq(teams.createdBy, creator));
       await getDb().delete(authUser).where(inArray(authUser.id, [creator, teammate]));

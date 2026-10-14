@@ -118,7 +118,21 @@ export async function teamDetails(request: Request): Promise<TeamDetails> {
   const [team] = await db.select({ createdBy: teams.createdBy, accessCodeEncrypted: teams.accessCodeEncrypted }).from(teams).where(eq(teams.id, teamId)).limit(1);
   const rows = await db.selectDistinct({ id: authUser.id, name: authUser.name }).from(sessions)
     .innerJoin(authUser, eq(authUser.id, sessions.userId)).where(eq(sessions.teamId, teamId)).orderBy(asc(authUser.name), asc(authUser.id));
-  return teamDetailsSchema.parse({ accessCode: decryptAccessCode(team?.accessCodeEncrypted ?? null), members: rows.map((row) => ({ name: row.name, you: row.id === viewer.id, creator: row.id === team?.createdBy })) });
+  return teamDetailsSchema.parse({ accessCode: decryptAccessCode(team?.accessCodeEncrypted ?? null), canRename: !team?.createdBy || team.createdBy === viewer.id, members: rows.map((row) => ({ name: row.name, you: row.id === viewer.id, creator: row.id === team?.createdBy })) });
+}
+
+export async function renameTeam(request: Request, teamName: string): Promise<string> {
+  const viewer = await requireGoogleUser(request.headers);
+  const teamId = await requireTeam(request);
+  return getDb().transaction(async (tx) => {
+    const [team] = await tx.select({ createdBy: teams.createdBy }).from(teams).where(eq(teams.id, teamId)).for("update");
+    if (!team) throw new HttpError(401, "Team unavailable");
+    if (team.createdBy && team.createdBy !== viewer.id) throw new HttpError(403, "Only the team creator can rename the team");
+    const [taken] = await tx.select({ id: teams.id }).from(teams).where(and(eq(teams.name, teamName), ne(teams.id, teamId))).limit(1);
+    if (taken) throw new HttpError(409, "Team name is taken");
+    await tx.update(teams).set({ name: teamName }).where(eq(teams.id, teamId));
+    return teamId;
+  });
 }
 
 export async function leaveTeam(request: Request, confirmDelete = false): Promise<{ deleted: boolean }> {
