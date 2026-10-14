@@ -21,5 +21,5 @@ export async function verifyAccessCode(code: string, stored: string): Promise<bo
 export function flagFor(teamId: string, challengeId: number, secret = process.env.FLAG_SECRET): string {
   if (!secret || Buffer.byteLength(secret) < 32) throw new Error("FLAG_SECRET must have at least 32 bytes");
   const mac = createHmac("sha256", secret).update(`ctf-v1:${teamId}:${challengeId}`).digest("hex");
-  return `CTF{${mac}}`;
+  return `cdx{${mac}}`;
 }

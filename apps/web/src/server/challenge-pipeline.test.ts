@@ -98,5 +98,5 @@ it("public metadata contains no provider or private execution configuration", ()
   for (const challenge of challengeCatalog) {
     expect(Object.keys(challenge).sort()).toEqual(["id", "title", "subtitle", "description", "difficulty", "points", "defenses", "hint", "turnLimit", "interaction", "completionMethod"].sort());
   }
-  expect(JSON.stringify(challengeCatalog)).not.toMatch(/CTF\{|LLM_API_KEY|promptPolicy|inputGuard|outputGuard/);
+  expect(JSON.stringify(challengeCatalog)).not.toMatch(/cdx\{|LLM_API_KEY|promptPolicy|inputGuard|outputGuard/);
 });

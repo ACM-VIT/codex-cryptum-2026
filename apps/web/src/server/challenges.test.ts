@@ -31,7 +31,7 @@ it("enriches catalog records with registry interaction without overriding databa
   expect(result.map((challenge) => challenge.points)).toEqual(Array(10).fill(42));
   expect(result[9]).toMatchObject({ interaction: "sandbox", completionMethod: "sandbox" });
   expect(result[0]).toMatchObject({ interaction: "chat", completionMethod: "flag" });
-  expect(JSON.stringify(result)).not.toMatch(/execution|promptPolicy|CTF\{|LLM_API_KEY/);
+  expect(JSON.stringify(result)).not.toMatch(/execution|promptPolicy|cdx\{|LLM_API_KEY/);
 });
 
 it("does not silently default unknown database records to chat", async () => {
