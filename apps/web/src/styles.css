@@ -1007,11 +1007,11 @@ progress::-webkit-progress-value {
 .team-code {
   display: block;
   margin: 12px 0 4px;
-  font-size: 28px;
-  letter-spacing: 0.08em;
+  font-size: clamp(18px, 5vw, 24px);
+  letter-spacing: 0.06em;
   color: var(--ivory);
   user-select: all;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 .join-note {
   display: flex;
