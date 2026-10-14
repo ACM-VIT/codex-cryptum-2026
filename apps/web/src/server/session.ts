@@ -4,7 +4,7 @@ import { user as authUser } from "@cryptum/db/auth-schema";
 import { and, asc, eq, gt, ne } from "drizzle-orm";
 import { sessionSchema, teamDetailsSchema, type Session, type TeamDetails } from "@cryptum/contracts";
 import { requireGoogleUser } from "./better-auth";
-import { digest, hashAccessCode, newAccessCode, newToken, verifyAccessCode } from "./security";
+import { decryptAccessCode, digest, encryptAccessCode, hashAccessCode, newAccessCode, newToken, verifyAccessCode } from "./security";
 import { HttpError } from "./http";
 
 const COOKIE = process.env.NODE_ENV === "production" ? "__Host-cryptum-team" : "cryptum-team";
@@ -83,7 +83,7 @@ export async function createTeam(request: Request, teamName: string): Promise<{ 
   const accessCodeHash = await hashAccessCode(accessCode);
   const token = newToken();
   const teamId = await getDb().transaction(async (tx) => {
-    const [created] = await tx.insert(teams).values({ name: teamName, accessCodeHash, createdBy: user.id }).onConflictDoNothing().returning({ id: teams.id });
+    const [created] = await tx.insert(teams).values({ name: teamName, accessCodeHash, accessCodeEncrypted: encryptAccessCode(accessCode), createdBy: user.id }).onConflictDoNothing().returning({ id: teams.id });
     if (!created) throw new HttpError(409, "Team name is taken");
     await tx.insert(sessions).values({ userId: user.id, teamId: created.id, tokenHash: digest(token), expiresAt: new Date(Date.now() + SESSION_SECONDS * 1000) });
     return created.id;
@@ -95,10 +95,10 @@ export async function teamDetails(request: Request): Promise<TeamDetails> {
   const viewer = await requireGoogleUser(request.headers);
   const teamId = await requireTeam(request);
   const db = getDb();
-  const [team] = await db.select({ createdBy: teams.createdBy }).from(teams).where(eq(teams.id, teamId)).limit(1);
+  const [team] = await db.select({ createdBy: teams.createdBy, accessCodeEncrypted: teams.accessCodeEncrypted }).from(teams).where(eq(teams.id, teamId)).limit(1);
   const rows = await db.selectDistinct({ id: authUser.id, name: authUser.name }).from(sessions)
     .innerJoin(authUser, eq(authUser.id, sessions.userId)).where(eq(sessions.teamId, teamId)).orderBy(asc(authUser.name), asc(authUser.id));
-  return teamDetailsSchema.parse({ members: rows.map((row) => ({ name: row.name, you: row.id === viewer.id, creator: row.id === team?.createdBy })) });
+  return teamDetailsSchema.parse({ accessCode: decryptAccessCode(team?.accessCodeEncrypted ?? null), members: rows.map((row) => ({ name: row.name, you: row.id === viewer.id, creator: row.id === team?.createdBy })) });
 }
 
 export async function leaveTeam(request: Request, confirmDelete = false): Promise<{ deleted: boolean }> {

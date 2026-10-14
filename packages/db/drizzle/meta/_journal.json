@@ -36,6 +36,13 @@
       "when": 1792015900795,
       "tag": "0004_multiple_teams_per_creator",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792016105904,
+      "tag": "0005_team_access_code_display",
+      "breakpoints": true
     }
   ]
 }

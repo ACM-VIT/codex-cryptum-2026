@@ -140,6 +140,8 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
         { id: teammate, name: "Teammate Person", email: `${teammate}@example.test` },
       ]);
       const details = await (await team(request("team", "GET", {}, creator, cookie))).json();
+      expect(details.accessCode).toBe(result.accessCode);
+      expect(stored?.accessCodeEncrypted).not.toContain(result.accessCode);
       expect(details.members).toEqual([
         { name: "Creator Person", you: true, creator: true },
         { name: "Teammate Person", you: false, creator: false },

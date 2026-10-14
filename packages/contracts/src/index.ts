@@ -23,6 +23,7 @@ export const createdTeamSchema = z.object({
 });
 export type CreatedTeam = z.infer<typeof createdTeamSchema>;
 export const teamDetailsSchema = z.object({
+  accessCode: z.string().nullable(),
   members: z.array(z.object({
     name: z.string(),
     you: z.boolean(),

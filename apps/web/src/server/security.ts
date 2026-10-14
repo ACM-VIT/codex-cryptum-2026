@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCallback);
@@ -17,6 +17,30 @@ export async function hashAccessCode(code: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
   const derived = await scrypt(code, salt, 64) as Buffer;
   return `${salt}:${derived.toString("hex")}`;
+}
+
+function accessCodeKey(secret = process.env.BETTER_AUTH_SECRET): Buffer {
+  if (!secret || Buffer.byteLength(secret) < 32) throw new Error("BETTER_AUTH_SECRET must have at least 32 bytes");
+  return Buffer.from(hkdfSync("sha256", secret, "", "cryptum-team-access-code-v1", 32));
+}
+
+export function encryptAccessCode(code: string, secret?: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", accessCodeKey(secret), iv);
+  const encrypted = Buffer.concat([cipher.update(code, "utf8"), cipher.final()]);
+  return `v1:${iv.toString("base64url")}:${cipher.getAuthTag().toString("base64url")}:${encrypted.toString("base64url")}`;
+}
+
+export function decryptAccessCode(stored: string | null, secret?: string): string | null {
+  const parts = stored?.split(":");
+  if (!parts || parts.length !== 4 || parts[0] !== "v1") return null;
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", accessCodeKey(secret), Buffer.from(parts[1] ?? "", "base64url"));
+    decipher.setAuthTag(Buffer.from(parts[2] ?? "", "base64url"));
+    return Buffer.concat([decipher.update(Buffer.from(parts[3] ?? "", "base64url")), decipher.final()]).toString("utf8");
+  } catch {
+    return null;
+  }
 }
 
 export async function verifyAccessCode(code: string, stored: string): Promise<boolean> {

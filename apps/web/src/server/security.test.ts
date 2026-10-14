@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { scryptSync } from "node:crypto";
 import { test } from "vitest";
-import { digest, equalSecret, flagFor, hashAccessCode, newAccessCode, newToken, verifyAccessCode } from "./security";
+import { decryptAccessCode, digest, encryptAccessCode, equalSecret, flagFor, hashAccessCode, newAccessCode, newToken, verifyAccessCode } from "./security";
 import { filterReply, INSPECTION_LIMIT, isL5Blocked, isL6Blocked, REDACTION } from "./filters";
 import { body, challengeId, HttpError, sameOrigin } from "./http";
 import { z } from "zod";
@@ -41,6 +41,21 @@ test("generated team codes are readable, random, and verify against their hash",
   assert.notEqual(stored, await hashAccessCode(code));
   assert.equal(await verifyAccessCode(code, stored), true);
   assert.equal(await verifyAccessCode(newAccessCode(), stored), false);
+});
+
+test("stored team codes decrypt only with the original secret and fail closed when tampered", () => {
+  const secret = "k".repeat(32);
+  const stored = encryptAccessCode("CC-ABCDEFGH23", secret);
+  assert.doesNotMatch(stored, /CC-ABCDEFGH23/);
+  assert.notEqual(stored, encryptAccessCode("CC-ABCDEFGH23", secret));
+  assert.equal(decryptAccessCode(stored, secret), "CC-ABCDEFGH23");
+  assert.equal(decryptAccessCode(stored, "z".repeat(32)), null);
+  const parts = stored.split(":");
+  const tampered = [...parts.slice(0, 3), `${parts[3]?.startsWith("A") ? "B" : "A"}${parts[3]?.slice(1)}`].join(":");
+  assert.equal(decryptAccessCode(tampered, secret), null);
+  assert.equal(decryptAccessCode(null, secret), null);
+  assert.equal(decryptAccessCode("malformed", secret), null);
+  assert.throws(() => encryptAccessCode("CC-ABCDEFGH23", "short"));
 });
 
 test("L5 intentionally filters exact case-sensitive strings only", () => {
