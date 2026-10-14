@@ -53,7 +53,7 @@ def call_openai(host, model, messages):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="http://localhost:11434")
-    ap.add_argument("--model", default="codex-qwen")
+    ap.add_argument("--model", default="qwen3:8b")
     args = ap.parse_args()
 
     failures = 0

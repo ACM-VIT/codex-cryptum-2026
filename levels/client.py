@@ -5,7 +5,7 @@ import urllib.error
 import urllib.request
 
 BASE_URL = os.environ.get("CDX_MODEL_URL", "http://127.0.0.1:8080/v1").rstrip("/")
-MODEL = os.environ.get("CDX_MODEL", "codex-qwen")
+MODEL = os.environ.get("CDX_MODEL", "qwen3:8b")
 NO_THINK = " /no_think"
 FLAG_RE = re.compile(r"cdx\{[A-Za-z0-9_-]{1,128}\}")
 

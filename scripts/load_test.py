@@ -154,7 +154,7 @@ def run_level(n, args):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:8080/v1")
-    ap.add_argument("--model", default="codex-qwen")
+    ap.add_argument("--model", default="qwen3:8b")
     ap.add_argument("--users", default="10,20,30")
     ap.add_argument("--turns", type=int, default=3)
     ap.add_argument("--think", type=float, nargs=2, default=(3.0, 8.0), metavar=("MIN", "MAX"))

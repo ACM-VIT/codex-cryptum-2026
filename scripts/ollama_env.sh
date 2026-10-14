@@ -13,7 +13,7 @@ else
   exit 1
 fi
 
-MODEL=${MODEL:-codex-qwen}
+MODEL=${MODEL:-qwen3:8b}
 API=${OLLAMA_API:-http://127.0.0.1:11434}
 STATE_DIR=${STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/codex-ollama}
 DROPIN=/etc/systemd/system/ollama.service.d/codex.conf

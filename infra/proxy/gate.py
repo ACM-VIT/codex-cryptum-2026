@@ -21,7 +21,7 @@ def log(client, method, path, status, started):
 class Gate(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.0"
     allow = set()
-    model = "codex-qwen"
+    model = "qwen3:8b"
     upstream = ("127.0.0.1", 11434)
 
     def log_message(self, *args):
@@ -111,7 +111,7 @@ def main():
     ap.add_argument("--allow", action="append", required=True, help="client IP allowed to connect; repeatable")
     ap.add_argument("--bind", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8080)
-    ap.add_argument("--model", default="codex-qwen")
+    ap.add_argument("--model", default="qwen3:8b")
     ap.add_argument("--upstream-port", type=int, default=11434)
     args = ap.parse_args()
 
