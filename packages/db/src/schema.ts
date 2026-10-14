@@ -16,6 +16,7 @@ export const teams = pgTable("teams", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull().unique(),
   accessCodeHash: text("access_code_hash").notNull(),
+  createdBy: text("created_by").unique(),
 });
 
 export const sessions = pgTable("sessions", {
