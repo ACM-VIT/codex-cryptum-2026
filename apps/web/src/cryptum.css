@@ -1449,3 +1449,19 @@ h3,
 .team-actions {
   margin-top: 40px;
 }
+.team-code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 0;
+}
+.team-code-row .team-code {
+  margin-top: 0;
+}
+@media (max-width: 640px) {
+  .team-code-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

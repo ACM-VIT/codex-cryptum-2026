@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, LogOut } from "lucide-react";
+import { ArrowUpRight, Copy, LogOut } from "lucide-react";
 import { AnimatedPage, Dialog, ErrorNotice } from "../components/ui";
 import { useApp } from "../lib/context";
 import { api, ApiError } from "../lib/api";
@@ -31,6 +31,14 @@ export function TeamPage() {
     );
   }
   const solved = challenges.filter((challenge) => session.solved.includes(challenge.id));
+  const copyCode = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast("Team code copied.");
+    } catch {
+      toast("Copy failed. Select the code and copy it manually.");
+    }
+  };
   const startLeaving = async () => {
     try {
       const latest = await api.team();
@@ -74,6 +82,18 @@ export function TeamPage() {
           <b>{details ? String(details.members.length).padStart(2, "0") : "—"}</b>
         </div>
       </div>
+      <section className="team-section">
+        <h2>Team code</h2>
+        {details?.accessCode ? (
+          <div className="team-code-card team-code-row">
+            <div>
+              <code className="team-code">{details.accessCode}</code>
+              <span className="field-help">Share this code and the team name with teammates so they can join.</span>
+            </div>
+            <button type="button" className="button button-outline" onClick={() => copyCode(details.accessCode ?? "")}>Copy code<Copy size={16} /></button>
+          </div>
+        ) : <p className="field-help">{details ? "This team's code was created before codes could be shown again. Ask your team creator for it." : "Loading team code…"}</p>}
+      </section>
       <section className="team-section">
         <h2>Members</h2>
         {error ? <ErrorNotice message={error} /> : (
