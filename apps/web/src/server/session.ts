@@ -1,5 +1,5 @@
 import "server-only";
-import { getDb, teams, sessions, solves, messages } from "@cryptum/db";
+import { getDb, teams, sessions, solves, messages, accessCodeLookup, normalizeAccessCode } from "@cryptum/db";
 import { user as authUser } from "@cryptum/db/auth-schema";
 import { and, asc, desc, eq, gt, lte, ne } from "drizzle-orm";
 import { sessionSchema, teamDetailsSchema, type Session, type TeamDetails } from "@cryptum/contracts";
@@ -78,12 +78,14 @@ function joinLimit(key: string): void {
   joins.set(key, state);
 }
 
-export async function joinTeam(request: Request, teamName: string, accessCode: string): Promise<{ token: string; teamId: string }> {
+export async function joinTeam(request: Request, accessCode: string, teamName?: string): Promise<{ token: string; teamId: string }> {
   const user = await requireGoogleUser(request.headers);
   joinLimit(user.id);
   const db = getDb();
-  const [team] = await db.select().from(teams).where(eq(teams.name, teamName)).limit(1);
-  const valid = await verifyAccessCode(accessCode, team?.accessCodeHash ?? "");
+  const code = normalizeAccessCode(accessCode);
+  const [team] = await db.select().from(teams)
+    .where(teamName ? eq(teams.name, teamName) : eq(teams.accessCodeLookup, accessCodeLookup(code))).limit(1);
+  const valid = await verifyAccessCode(code, team?.accessCodeHash ?? "");
   if (!team || !valid) throw new HttpError(403, "Invalid team credentials");
   const token = newToken();
   await db.transaction(async (tx) => {
@@ -101,7 +103,7 @@ export async function createTeam(request: Request, teamName: string): Promise<{ 
   const accessCodeHash = await hashAccessCode(accessCode);
   const token = newToken();
   const teamId = await getDb().transaction(async (tx) => {
-    const [created] = await tx.insert(teams).values({ name: teamName, accessCodeHash, accessCodeEncrypted: encryptAccessCode(accessCode), createdBy: user.id }).onConflictDoNothing().returning({ id: teams.id });
+    const [created] = await tx.insert(teams).values({ name: teamName, accessCodeHash, accessCodeEncrypted: encryptAccessCode(accessCode), accessCodeLookup: accessCodeLookup(accessCode), createdBy: user.id }).onConflictDoNothing().returning({ id: teams.id });
     if (!created) throw new HttpError(409, "Team name is taken");
     await tx.insert(sessions).values({ userId: user.id, teamId: created.id, tokenHash: digest(token), expiresAt: new Date(Date.now() + SESSION_SECONDS * 1000) });
     return created.id;

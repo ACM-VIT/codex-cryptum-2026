@@ -15,8 +15,8 @@ export const GET = endpoint(async (request) => {
 });
 export const POST = endpoint(async (request) => {
   sameOrigin(request);
-  const input = await body(request, z.object({ teamName: z.string().trim().min(1).max(80), accessCode: z.string().min(1).max(128) }).strict());
-  const { token, teamId } = await joinTeam(request, input.teamName, input.accessCode);
+  const input = await body(request, z.object({ accessCode: z.string().trim().min(1).max(128), teamName: z.string().trim().min(1).max(80).optional() }).strict());
+  const { token, teamId } = await joinTeam(request, input.accessCode, input.teamName);
   const response = json(await snapshot(teamId));
   response.headers.set("Set-Cookie", sessionCookie(token));
   return response;

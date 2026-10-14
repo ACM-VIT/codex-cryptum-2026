@@ -132,8 +132,8 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
       const taken = await createTeam(request("teams", "POST", { teamName }, teammate, ""));
       expect(taken.status).toBe(409);
       expect((await taken.json()).error).toBe("Team name is taken");
-      expect((await join(request("session", "POST", { teamName, accessCode: result.accessCode }, teammate, ""))).status).toBe(200);
-      expect((await join(request("session", "POST", { teamName, accessCode: "CC-WRONGCODE" }, teammate, ""))).status).toBe(403);
+      expect((await join(request("session", "POST", { accessCode: ` ${result.accessCode.toLowerCase()} ` }, teammate, ""))).status).toBe(200);
+      expect((await join(request("session", "POST", { accessCode: "CC-WRONGCODE" }, teammate, ""))).status).toBe(403);
       await getDb().insert(authUser).values([
         { id: creator, name: "Creator Person", email: `${creator}@example.test` },
         { id: teammate, name: "Teammate Person", email: `${teammate}@example.test` },
@@ -165,7 +165,7 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
       const created = await createTeam(request("teams", "POST", { teamName }, creator, ""));
       const { accessCode, session: { id: createdId } } = await created.json();
       const creatorCookie = cookieFrom(created);
-      const teammateCookie = cookieFrom(await join(request("session", "POST", { teamName, accessCode }, teammate, "")));
+      const teammateCookie = cookieFrom(await join(request("session", "POST", { accessCode }, teammate, "")));
       expect((await logout(request("session/logout", "POST", {}, teammate, teammateCookie))).status).toBe(200);
       const restored = await session(request("session", "GET", {}, teammate, teammateCookie));
       expect((await restored.json()).id).toBe(createdId);
@@ -177,7 +177,7 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
       expect(await (await session(request("session", "GET", {}, `test-google-${randomUUID()}`, ""))).json()).toBeNull();
       const creatorLeft = await leave(request("session", "DELETE", {}, creator, creatorCookie));
       expect(await creatorLeft.json()).toEqual({ ok: true, deleted: false });
-      const teammateCookieAgain = cookieFrom(await join(request("session", "POST", { teamName, accessCode }, teammate, "")));
+      const teammateCookieAgain = cookieFrom(await join(request("session", "POST", { accessCode }, teammate, "")));
       const unconfirmed = await leave(request("session", "DELETE", {}, teammate, teammateCookieAgain));
       expect(unconfirmed.status).toBe(409);
       expect(await getDb().select().from(teams).where(eq(teams.id, createdId))).toHaveLength(1);

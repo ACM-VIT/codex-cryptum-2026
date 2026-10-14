@@ -54,7 +54,7 @@ export function Join() {
     setError("");
     try {
       if (mode === "create") setCreated(await transact(() => api.createTeam(teamName.trim())));
-      else proceed(await transact(() => api.join(teamName.trim(), code)));
+      else proceed(await transact(() => api.join(code.trim())));
     } catch (error) {
       setError((error as Error).message);
     }
@@ -99,14 +99,17 @@ export function Join() {
           <button type="button" onClick={() => switchMode("create")} aria-pressed={mode === "create"}>Create a team</button>
         </div>
         <form onSubmit={enter}>
-          <label htmlFor="team-name">Team name</label>
-          <Input id="team-name" size="lg" value={teamName} onChange={(event) => setTeamName(event.target.value)} placeholder="e.g. The Unprompted" minLength={2} maxLength={32} autoComplete="organization" required />
-          <span className="field-help">{mode === "create" ? "This name appears on the leaderboard and can't be changed later." : "This name appears on the leaderboard."}</span>
-          {mode === "join" && (
+          {mode === "create" ? (
+            <>
+              <label htmlFor="team-name">Team name</label>
+              <Input id="team-name" size="lg" value={teamName} onChange={(event) => setTeamName(event.target.value)} placeholder="e.g. The Unprompted" minLength={2} maxLength={32} autoComplete="organization" required />
+              <span className="field-help">This name appears on the leaderboard and can't be changed later.</span>
+            </>
+          ) : (
             <>
               <label htmlFor="team-code">Team code</label>
               <Input id="team-code" size="lg" value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. CC-1234ABCD" maxLength={128} autoComplete="off" required />
-              <span className="field-help">Ask your team creator for the code.</span>
+              <span className="field-help">Ask a teammate for your team's code.</span>
             </>
           )}
           <button className="button full-width" disabled={busy}>

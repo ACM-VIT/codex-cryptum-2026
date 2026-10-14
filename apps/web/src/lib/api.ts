@@ -67,8 +67,8 @@ async function request<T>(
 
 const live: CtfApi = {
   session: () => request("/session", sessionSchema.nullable()),
-  join: (teamName, accessCode) =>
-    request("/session", sessionSchema, "POST", { teamName, accessCode }),
+  join: (accessCode) =>
+    request("/session", sessionSchema, "POST", { accessCode }),
   createTeam: (teamName) =>
     request("/teams", createdTeamSchema, "POST", { teamName }, [409]),
   team: () => request("/team", teamDetailsSchema),

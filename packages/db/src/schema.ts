@@ -18,6 +18,7 @@ export const teams = pgTable("teams", {
   accessCodeHash: text("access_code_hash").notNull(),
   createdBy: text("created_by"),
   accessCodeEncrypted: text("access_code_encrypted"),
+  accessCodeLookup: text("access_code_lookup").unique(),
 });
 
 export const sessions = pgTable("sessions", {

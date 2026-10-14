@@ -70,7 +70,7 @@ export type AuthConfiguration = z.infer<typeof authConfigurationSchema>;
 
 export interface CtfApi {
   session(): Promise<Session | null>;
-  join(teamName: string, accessCode: string): Promise<Session>;
+  join(accessCode: string): Promise<Session>;
   createTeam(teamName: string): Promise<CreatedTeam>;
   team(): Promise<TeamDetails>;
   leave(confirmDelete?: boolean): Promise<{ deleted: boolean }>;

@@ -1,5 +1,5 @@
 import { randomBytes, scryptSync } from "node:crypto";
-import { getDb, closeDb, challenges, teams, sandboxTeams } from "../src/index.js";
+import { getDb, closeDb, challenges, teams, sandboxTeams, accessCodeLookup } from "../src/index.js";
 import { requireEnv } from "./env.js";
 import { challengeSeed } from "./challenges.js";
 
@@ -8,6 +8,7 @@ const code = requireEnv("DEV_TEAM_ACCESS_CODE");
 const salt = randomBytes(16).toString("hex");
 const accessCodeHash = `${salt}:${scryptSync(code, salt, 64).toString("hex")}`;
 const demoTeamName = process.env.DEV_TEAM_NAME || "Demo Team";
+const demoCodeLookup = accessCodeLookup(code, requireEnv("BETTER_AUTH_SECRET"));
 
 try {
   await getDb().transaction(async (tx) => {
@@ -27,8 +28,8 @@ try {
         },
       });
     }
-    await tx.insert(teams).values({ name: demoTeamName, accessCodeHash })
-      .onConflictDoUpdate({ target: teams.name, set: { accessCodeHash } });
+    await tx.insert(teams).values({ name: demoTeamName, accessCodeHash, accessCodeLookup: demoCodeLookup })
+      .onConflictDoUpdate({ target: teams.name, set: { accessCodeHash, accessCodeLookup: demoCodeLookup } });
     await tx.insert(sandboxTeams).values([
       { id: "team-aurora", name: "Aurora Labs", score: 4200 },
       { id: "team-borealis", name: "Borealis Security", score: 3300 },
