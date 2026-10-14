@@ -6,13 +6,15 @@ For the Backend team. This is the only supported way to talk to the model.
 
 | | |
 |---|---|
-| Base URL | `http://<infra-host>:11434/v1` (OpenAI-compatible) |
+| Base URL | `http://<infra-host>:8080/v1` (OpenAI-compatible) |
 | Model | `codex-qwen` |
 | API key | Not checked. Send any non-empty string, e.g. `ollama` |
 | Route | `POST /chat/completions` |
-| Health | `GET http://<infra-host>:11434/api/tags` returns 200 and lists `codex-qwen` |
+| Health | `GET http://<infra-host>:8080/api/tags` returns 200 and lists `codex-qwen` |
 
-`<infra-host>` is the IP of the model machine, announced on event day. Only the backend talks to this endpoint. Participants never connect to it, and the frontend never receives raw model output.
+`<infra-host>` is the IP of the model machine, announced on event day. Port 8080 is an access gate in front of Ollama ([NETWORK.md](NETWORK.md)). It only accepts the backend machine's IP, only the routes above plus `GET /v1/models`, and only `"model": "codex-qwen"`. Ollama's own port 11434 is not reachable from the network. Participants never connect to this endpoint, and the frontend never receives raw model output.
+
+Send Infra your backend machine's IP before the event so it can be allowed.
 
 ## Model defaults
 
@@ -49,7 +51,7 @@ pip install openai
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama", timeout=120)
+client = OpenAI(base_url="http://localhost:8080/v1", api_key="ollama", timeout=120)
 
 NO_THINK = " /no_think"
 
@@ -92,4 +94,7 @@ Replace `localhost` with `<infra-host>` when running on the backend machine.
 | HTTP 503 | The server queue is full | Retry after a few seconds with backoff; don't retry instantly |
 | Read timeout | The request waited too long in the queue | Same as 503 |
 | HTTP 404 `model "codex-qwen" not found` | The model isn't installed on that host | Alert Infra |
+| HTTP 403 `forbidden` | Your IP isn't on the gate's allow list | Send Infra your current IP |
+| HTTP 400 `model must be codex-qwen` | Wrong `model` in the request | Fix the request |
+| HTTP 502 `model server unavailable` | The gate is up but Ollama is down | Alert Infra |
 | Empty string after `clean()` | The reply was dropped by rule 3 | Show a generic "no answer, rephrase" message. Never show the raw text |
