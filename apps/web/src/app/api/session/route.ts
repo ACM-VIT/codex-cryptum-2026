@@ -1,12 +1,17 @@
 import { z } from "zod";
 import { body, endpoint, json, sameOrigin } from "../../../server/http";
-import { currentTeam, joinTeam, leaveTeam, sessionCookie, snapshot } from "../../../server/session";
+import { currentTeam, joinTeam, leaveTeam, restoreTeam, sessionCookie, snapshot } from "../../../server/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const GET = endpoint(async (request) => {
   const teamId = await currentTeam(request, true);
-  return json(teamId ? await snapshot(teamId) : null);
+  if (teamId) return json(await snapshot(teamId));
+  const restored = await restoreTeam(request);
+  if (!restored) return json(null);
+  const response = json(await snapshot(restored.teamId));
+  response.headers.set("Set-Cookie", sessionCookie(restored.token));
+  return response;
 });
 export const POST = endpoint(async (request) => {
   sameOrigin(request);

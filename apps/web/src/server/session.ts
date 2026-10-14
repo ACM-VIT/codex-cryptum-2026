@@ -1,7 +1,7 @@
 import "server-only";
 import { getDb, teams, sessions, solves, messages } from "@cryptum/db";
 import { user as authUser } from "@cryptum/db/auth-schema";
-import { and, asc, eq, gt, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lte, ne } from "drizzle-orm";
 import { sessionSchema, teamDetailsSchema, type Session, type TeamDetails } from "@cryptum/contracts";
 import { requireGoogleUser } from "./better-auth";
 import { decryptAccessCode, digest, encryptAccessCode, hashAccessCode, newAccessCode, newToken, verifyAccessCode } from "./security";
@@ -29,6 +29,24 @@ export async function currentTeam(request: Request, nullable = false): Promise<s
   )).limit(1);
   if (!session && !nullable) throw new HttpError(401, "Team session expired");
   return session?.teamId ?? null;
+}
+
+export async function restoreTeam(request: Request): Promise<{ token: string; teamId: string } | null> {
+  let userId: string;
+  try {
+    userId = (await requireGoogleUser(request.headers)).id;
+  } catch {
+    return null;
+  }
+  return getDb().transaction(async (tx) => {
+    const [membership] = await tx.select({ teamId: sessions.teamId }).from(sessions)
+      .where(eq(sessions.userId, userId)).orderBy(desc(sessions.expiresAt)).limit(1);
+    if (!membership) return null;
+    const token = newToken();
+    await tx.delete(sessions).where(and(eq(sessions.userId, userId), eq(sessions.teamId, membership.teamId), lte(sessions.expiresAt, new Date())));
+    await tx.insert(sessions).values({ userId, teamId: membership.teamId, tokenHash: digest(token), expiresAt: new Date(Date.now() + SESSION_SECONDS * 1000) });
+    return { token, teamId: membership.teamId };
+  });
 }
 
 export async function requireTeam(request: Request): Promise<string> {

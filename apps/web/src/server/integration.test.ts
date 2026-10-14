@@ -14,7 +14,7 @@ vi.mock("./better-auth", () => ({
 
 import { getDb, closeDb, teams, sessions, messages, submissions, solves, sandboxTeams, exploitEvents, chatOperations } from "@cryptum/db";
 import { user as authUser } from "@cryptum/db/auth-schema";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { POST as join, GET as session, DELETE as leave } from "../app/api/session/route";
 import { POST as logout } from "../app/api/session/logout/route";
 import { POST as createTeam } from "../app/api/teams/route";
@@ -167,8 +167,14 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
       const creatorCookie = cookieFrom(created);
       const teammateCookie = cookieFrom(await join(request("session", "POST", { teamName, accessCode }, teammate, "")));
       expect((await logout(request("session/logout", "POST", {}, teammate, teammateCookie))).status).toBe(200);
-      expect(await (await session(request("session", "GET", {}, teammate, teammateCookie))).json()).toBeNull();
+      const restored = await session(request("session", "GET", {}, teammate, teammateCookie));
+      expect((await restored.json()).id).toBe(createdId);
+      expect(cookieFrom(restored)).not.toBe(teammateCookie);
       expect(await getDb().select().from(sessions).where(and(eq(sessions.teamId, createdId), eq(sessions.userId, teammate)))).toHaveLength(1);
+      const otherDevice = await session(request("session", "GET", {}, teammate, ""));
+      expect((await otherDevice.json()).id).toBe(createdId);
+      expect(await getDb().select().from(sessions).where(and(eq(sessions.teamId, createdId), eq(sessions.userId, teammate), gt(sessions.expiresAt, new Date())))).toHaveLength(2);
+      expect(await (await session(request("session", "GET", {}, `test-google-${randomUUID()}`, ""))).json()).toBeNull();
       const creatorLeft = await leave(request("session", "DELETE", {}, creator, creatorCookie));
       expect(await creatorLeft.json()).toEqual({ ok: true, deleted: false });
       const teammateCookieAgain = cookieFrom(await join(request("session", "POST", { teamName, accessCode }, teammate, "")));
