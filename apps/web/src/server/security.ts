@@ -51,8 +51,9 @@ export async function verifyAccessCode(code: string, stored: string): Promise<bo
   return timingSafeEqual(derived, Buffer.from(match?.[2] ?? "0".repeat(128), "hex")) && !!match;
 }
 
-export function flagFor(teamId: string, challengeId: number, secret = process.env.FLAG_SECRET): string {
+export function flagFor(teamId: string, challengeId: number, phrase: string, secret = process.env.FLAG_SECRET): string {
   if (!secret || Buffer.byteLength(secret) < 32) throw new Error("FLAG_SECRET must have at least 32 bytes");
-  const mac = createHmac("sha256", secret).update(`ctf-v1:${teamId}:${challengeId}`).digest("hex");
-  return `CTF{${mac}}`;
+  if (!/^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(phrase)) throw new Error("Flag phrase must be lowercase words joined by underscores");
+  const mac = createHmac("sha256", secret).update(`ctf-v1:${teamId}:${challengeId}`).digest("hex").slice(0, 16);
+  return `cdx{${phrase}_${mac}}`;
 }

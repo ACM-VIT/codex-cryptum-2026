@@ -24,8 +24,7 @@ import { POST as chat } from "../app/api/challenges/[id]/messages/route";
 import { DELETE as resetConversation } from "../app/api/challenges/[id]/conversation/route";
 import { PATCH as patch } from "../app/api/challenge/leaderboard/teams/[id]/route";
 import { POST as complete } from "../app/api/challenge/leaderboard/complete/route";
-import { officialLeaderboard } from "./challenges";
-import { flagFor } from "./security";
+import { flagForChallenge, officialLeaderboard } from "./challenges";
 
 const enabled = process.env.CRYPTUM_RUN_DATABASE_TESTS === "1";
 const origin = "https://cryptum-integration.example";
@@ -186,11 +185,11 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
   });
 
   it("accepts only the current team's HMAC flag and awards one immutable solve", async () => {
-    const wrong = await submit(request("challenges/5/submissions", "POST", { flag: flagFor(otherId, 5) }), id("5"));
+    const wrong = await submit(request("challenges/5/submissions", "POST", { flag: flagForChallenge(otherId, 5) }), id("5"));
     expect((await wrong.json()).status).toBe("incorrect");
-    const first = await submit(request("challenges/5/submissions", "POST", { flag: flagFor(teamId, 5) }), id("5"));
+    const first = await submit(request("challenges/5/submissions", "POST", { flag: flagForChallenge(teamId, 5) }), id("5"));
     expect((await first.json()).status).toBe("accepted");
-    const repeated = await submit(request("challenges/5/submissions", "POST", { flag: flagFor(teamId, 5) }), id("5"));
+    const repeated = await submit(request("challenges/5/submissions", "POST", { flag: flagForChallenge(teamId, 5) }), id("5"));
     expect((await repeated.json()).status).toBe("duplicate");
     const awards = await getDb().select().from(solves).where(eq(solves.teamId, teamId));
     expect(awards).toHaveLength(1);

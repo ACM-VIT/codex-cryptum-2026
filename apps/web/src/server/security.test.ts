@@ -6,14 +6,15 @@ import { filterReply, INSPECTION_LIMIT, isL5Blocked, isL6Blocked, REDACTION } fr
 import { body, challengeId, HttpError, sameOrigin } from "./http";
 import { z } from "zod";
 
-const flag = "CTF{synthetic_l6_smart_flag}";
+const flag = "cdx{synthetic_l6_smart_flag}";
 
-test("flags use the FastAPI HMAC format and are isolated by team and challenge", () => {
+test("flags use the cdx phrase format and are isolated by team and challenge", () => {
   const secret = "s".repeat(32);
-  assert.equal(flagFor("team-a", 5, secret), "CTF{172f9919bc83f81f984b434c190267fb81b7c5c41d0d8678c16cfad7aafa27f7}");
-  assert.notEqual(flagFor("team-a", 5, secret), flagFor("team-b", 5, secret));
-  assert.notEqual(flagFor("team-a", 5, secret), flagFor("team-a", 6, secret));
-  assert.throws(() => flagFor("team-a", 5, "short"));
+  assert.equal(flagFor("team-a", 5, "same_secret_new_shape", secret), "cdx{same_secret_new_shape_172f9919bc83f81f}");
+  assert.notEqual(flagFor("team-a", 5, "same_secret_new_shape", secret), flagFor("team-b", 5, "same_secret_new_shape", secret));
+  assert.notEqual(flagFor("team-a", 5, "same_secret_new_shape", secret), flagFor("team-a", 6, "same_secret_new_shape", secret));
+  assert.throws(() => flagFor("team-a", 5, "same_secret_new_shape", "short"));
+  assert.throws(() => flagFor("team-a", 5, "Not A Phrase}", secret));
 });
 
 test("session tokens are random, hashed, and safely compared", () => {
@@ -60,7 +61,7 @@ test("stored team codes decrypt only with the original secret and fail closed wh
 
 test("L5 intentionally filters exact case-sensitive strings only", () => {
   assert.equal(isL5Blocked(`prefix ${flag} suffix`, flag), true);
-  assert.equal(isL5Blocked(flag.toLowerCase(), flag), false);
+  assert.equal(isL5Blocked(flag.toUpperCase(), flag), false);
   assert.equal(isL5Blocked([...flag].join(" "), flag), false);
   assert.equal(filterReply(5, flag, flag), REDACTION);
 });
