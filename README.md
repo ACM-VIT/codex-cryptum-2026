@@ -31,3 +31,7 @@ The default is a browser-local frontend preview with scripted responses and samp
 For the existing API adapter, copy `frontend/.env.example` to `frontend/.env.local` and set `VITE_API_BASE_URL`. Endpoints are defined in `frontend/src/lib/api.ts`; request/response types are in `frontend/src/lib/contracts.ts`. Individual authentication and team creation/joining still need backend integration. Do not put secrets in `VITE_*` variables.
 
 Component credits are retained in [frontend/THIRD_PARTY.md](frontend/THIRD_PARTY.md); font licenses are in `frontend/public/licenses/`.
+
+## GitHub Pages
+
+The workflow in `.github/workflows/deploy-pages.yml` tests, builds, and publishes `frontend/dist` after frontend changes are pushed to `main`. In repository **Settings → Pages**, select **GitHub Actions** as the source. The deployment URL is https://minnhaaaaa.github.io/Codex-Cryptum-2026/. Hash routing supports direct challenge and leaderboard links. This publishes the browser-local frontend preview.
