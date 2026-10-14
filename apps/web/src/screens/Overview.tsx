@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ArrowUpRight, Flag } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Copy, Flag } from "lucide-react";
 import { AnimatedPage, ErrorNotice } from "@/components/ui";
 import { Input } from "@/components/ui/input";
 import { GoogleSignIn } from "@/components/google-sign-in";
@@ -10,6 +10,7 @@ import { ParallaxComponent } from "@/components/ui/parallax-scrolling";
 import { ChallengeBento } from "@/components/challenge-bento";
 import { useApp } from "@/lib/context";
 import { api } from "@/lib/api";
+import type { CreatedTeam, Session } from "@/lib/contracts";
 
 export function Landing() {
   const { session } = useApp();
@@ -29,38 +30,84 @@ export function Landing() {
 }
 
 export function Join() {
+  const [mode, setMode] = useState<"join" | "create">("join");
   const [teamName, setTeamName] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
-  const { setSession, busy, transact } = useApp();
+  const [created, setCreated] = useState<CreatedTeam | null>(null);
+  const { setSession, busy, transact, toast } = useApp();
   const router = useRouter();
+  const proceed = (session: Session) => {
+    setSession(session);
+    const from = new URLSearchParams(window.location.search).get("from");
+    router.replace(from?.startsWith("/arena/") ? from : "/arena");
+  };
+  const switchMode = (next: "join" | "create") => {
+    setMode(next);
+    setError("");
+  };
   const enter = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
     try {
-      const session = await transact(() => api.join(teamName.trim(), code));
-      setSession(session);
-      const from = new URLSearchParams(window.location.search).get("from");
-      router.replace(from?.startsWith("/arena/") ? from : "/arena");
+      if (mode === "create") setCreated(await transact(() => api.createTeam(teamName.trim())));
+      else proceed(await transact(() => api.join(teamName.trim(), code)));
     } catch (error) {
       setError((error as Error).message);
     }
   };
+  const copy = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast("Team code copied.");
+    } catch {
+      toast("Copy failed. Select the code and copy it manually.");
+    }
+  };
+  if (created) {
+    return (
+      <AnimatedPage className="join-page">
+        <div className="join-illustration"><KeyholeMark className="join-keyhole" /></div>
+        <section className="join-form">
+          <h1>Team created.</h1>
+          <div className="team-code-card">
+            <span className="field-help">Team code for {created.session.teamName}</span>
+            <code className="team-code">{created.accessCode}</code>
+            <span className="field-help">Share this code with your teammates. It is shown only once, so save it now.</span>
+          </div>
+          <button type="button" className="button button-outline full-width" onClick={() => copy(created.accessCode)}>
+            Copy code<Copy size={16} />
+          </button>
+          <button type="button" className="button full-width" onClick={() => proceed(created.session)}>
+            Continue to challenges<ArrowRight size={18} />
+          </button>
+        </section>
+      </AnimatedPage>
+    );
+  }
   return (
     <AnimatedPage className="join-page">
       <div className="join-illustration"><KeyholeMark className="join-keyhole" /></div>
       <section className="join-form">
-        <h1>Find your team.</h1>
+        <h1>{mode === "create" ? "Start a team." : "Find your team."}</h1>
         <GoogleSignIn callbackURL="/join" />
+        <div className="segmented join-mode" aria-label="Team access">
+          <button type="button" onClick={() => switchMode("join")} aria-pressed={mode === "join"}>Join a team</button>
+          <button type="button" onClick={() => switchMode("create")} aria-pressed={mode === "create"}>Create a team</button>
+        </div>
         <form onSubmit={enter}>
           <label htmlFor="team-name">Team name</label>
           <Input id="team-name" size="lg" value={teamName} onChange={(event) => setTeamName(event.target.value)} placeholder="e.g. The Unprompted" minLength={2} maxLength={32} autoComplete="organization" required />
-          <span className="field-help">This name appears on the leaderboard.</span>
-          <label htmlFor="team-code">Team code</label>
-          <Input id="team-code" size="lg" value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. CC-1234ABCD" maxLength={128} autoComplete="off" required />
-          <span className="field-help">Ask your team creator for the code.</span>
+          <span className="field-help">{mode === "create" ? "This name appears on the leaderboard and can't be changed later." : "This name appears on the leaderboard."}</span>
+          {mode === "join" && (
+            <>
+              <label htmlFor="team-code">Team code</label>
+              <Input id="team-code" size="lg" value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. CC-1234ABCD" maxLength={128} autoComplete="off" required />
+              <span className="field-help">Ask your team creator for the code.</span>
+            </>
+          )}
           <button className="button full-width" disabled={busy}>
-            {busy ? "Entering…" : "Join team"}<ArrowRight size={18} />
+            {mode === "create" ? (busy ? "Creating…" : "Create team") : (busy ? "Entering…" : "Join team")}<ArrowRight size={18} />
           </button>
         </form>
         {error && <ErrorNotice message={error} />}

@@ -990,6 +990,29 @@ progress::-webkit-progress-value {
 .join-form .full-width {
   margin-top: 24px;
 }
+.join-form .join-mode {
+  margin-top: 28px;
+}
+.join-mode button {
+  flex: 1;
+  justify-content: center;
+}
+.team-code-card {
+  margin-top: 32px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #ffffff04;
+}
+.team-code {
+  display: block;
+  margin: 12px 0 4px;
+  font-size: 28px;
+  letter-spacing: 0.08em;
+  color: var(--ivory);
+  user-select: all;
+  overflow-wrap: anywhere;
+}
 .join-note {
   display: flex;
   align-items: flex-start;
