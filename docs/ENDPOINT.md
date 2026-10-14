@@ -3,7 +3,7 @@
 For Backend. Only the backend server calls this, never the browser.
 
 - **URL:** `http://<model-machine-ip>:8080/v1` (OpenAI-compatible)
-- **Model:** `codex-qwen`
+- **Model:** `qwen3:8b`
 - **API key:** any string, e.g. `ollama`
 - **Timeout:** at least 120 s, because requests wait in a queue when busy
 
@@ -41,7 +41,7 @@ def chat(system_prompt, history, user_message):
         content = turn["content"] + " /no_think" if turn["role"] == "user" else turn["content"]
         messages.append({"role": turn["role"], "content": content})
     messages.append({"role": "user", "content": user_message + " /no_think"})
-    response = client.chat.completions.create(model="codex-qwen", messages=messages)
+    response = client.chat.completions.create(model="qwen3:8b", messages=messages)
     return clean(response.choices[0].message.content or "")
 
 

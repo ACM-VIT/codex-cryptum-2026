@@ -4,7 +4,7 @@ Run commands from the repo root on the model machine (macOS or Linux).
 
 ## How it's set up
 
-- **Ollama** runs `codex-qwen` on `127.0.0.1:11434`, so only this machine can reach it.
+- **Ollama** runs `qwen3:8b` on `127.0.0.1:11434`, so only this machine can reach it. It's Qwen3-8B with our settings: short replies, low temperature, 8192 context. The untouched original is kept as `qwen3:8b-base`.
 - **The gate** (`infra/proxy/gate.py`) listens on port 8080. It only lets the backend's IP use the chat route, which stops anyone else from deleting or flooding the model.
 - **Settings** (`scripts/ollama_env.sh`): 4 requests run at once, up to 32 more wait in a queue, and the model stays loaded all day.
 
@@ -84,7 +84,11 @@ A Mac with 16 GB+, or Linux with an 8 GB+ NVIDIA GPU.
    ```
 3. Create the model:
    ```bash
-   ollama create codex-qwen -f infra/ollama/Modelfile
+   ollama create qwen3:8b -f infra/ollama/Modelfile
+   ```
+   If you downloaded instead of copying, first name the download `qwen3:8b-base`:
+   ```bash
+   ollama cp hf.co/Qwen/Qwen3-8B-GGUF:Q4_K_M qwen3:8b-base
    ```
 4. Do setup steps 2–6 on it, and keep it running on the day.
 
