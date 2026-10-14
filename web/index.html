@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Cryptum Challenge Leaderboard</title>
+  <style>
+    :root { color-scheme: dark; font: 16px/1.5 system-ui, sans-serif; background: #101620; color: #e7edf5; }
+    body { max-width: 850px; margin: 3rem auto; padding: 0 1.25rem; }
+    h1 { letter-spacing: .02em; }
+    .scope { color: #9aabc0; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1.5rem; background: #182230; }
+    th, td { text-align: left; padding: .85rem 1rem; border-bottom: 1px solid #2b394b; }
+    th { color: #a9c4e5; }
+    td:first-child { width: 6rem; }
+    td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+    .error { color: #ff9d9d; }
+  </style>
+</head>
+<body>
+  <h1>Challenge leaderboard</h1>
+  <p class="scope">Isolated practice scores · refreshes every 10 seconds</p>
+  <p id="status" role="status">Loading…</p>
+  <table>
+    <thead><tr><th>Rank</th><th>Team</th><th>Score</th></tr></thead>
+    <tbody id="entries"></tbody>
+  </table>
+  <script src="/leaderboard.js" defer></script>
+</body>
+</html>
