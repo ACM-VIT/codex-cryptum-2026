@@ -118,7 +118,7 @@ export function TeamPage() {
           <div className="team-code-card team-code-row">
             <div>
               <code className="team-code">{details.accessCode}</code>
-              <span className="field-help">Share this code and the team name with teammates so they can join.</span>
+              <span className="field-help">Share this code with teammates so they can join.</span>
             </div>
             <button type="button" className="button button-outline" onClick={() => copyCode(details.accessCode ?? "")}>Copy code<Copy size={16} /></button>
           </div>

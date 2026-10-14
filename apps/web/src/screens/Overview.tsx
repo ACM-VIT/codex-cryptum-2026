@@ -76,7 +76,7 @@ export function Join() {
           <div className="team-code-card">
             <span className="field-help">Team code for {created.session.teamName}</span>
             <code className="team-code">{created.accessCode}</code>
-            <span className="field-help">Share this code with your teammates. It is shown only once, so save it now.</span>
+            <span className="field-help">Share this code with your teammates. You can find it again on My team.</span>
           </div>
           <button type="button" className="button button-outline full-width" onClick={() => copy(created.accessCode)}>
             Copy code<Copy size={16} />
