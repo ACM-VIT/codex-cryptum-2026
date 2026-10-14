@@ -29,7 +29,7 @@ Keep these in the root `.env`. Never commit it.
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth web client |
 | `LLM_API_KEY` | Model provider key |
 | `LLM_BASE_URL` | OpenAI-compatible base URL, e.g. `https://api.openai.com/v1` |
-| `LLM_MODEL` | `gpt-6-luna` |
+| `LLM_MODEL` | `gpt-6-luna`, or `qwen3:8b` for the event model host (see `docs/ENDPOINT.md`) |
 | `FLAG_SECRET` | Independent random secret, at least 32 bytes |
 | `DEV_TEAM_ACCESS_CODE` | Development team's access code |
 | `ORGANIZER_TOKEN` | Independent secret for resetting the sandbox |

@@ -50,7 +50,7 @@ Run commands from the repo root on the model machine (macOS or Linux).
    ```bash
    python3 scripts/healthcheck.py
    ```
-7. Give Backend the URL `http://<this-ip>:8080/v1`. Get the IP with `ipconfig getifaddr en0` (macOS) or `hostname -I` (Linux).
+7. Put an HTTPS proxy in front of port 8080 and give Backend its `https://` URL ending in `/v1`. Get the IP with `ipconfig getifaddr en0` (macOS) or `hostname -I` (Linux).
 8. Leave a monitor running:
    ```bash
    python3 scripts/healthcheck.py --watch 60
