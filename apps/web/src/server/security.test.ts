@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { scryptSync } from "node:crypto";
 import { test } from "vitest";
-import { digest, equalSecret, flagFor, newToken, verifyAccessCode } from "./security";
+import { digest, equalSecret, flagFor, hashAccessCode, newAccessCode, newToken, verifyAccessCode } from "./security";
 import { filterReply, INSPECTION_LIMIT, isL5Blocked, isL6Blocked, REDACTION } from "./filters";
 import { body, challengeId, HttpError, sameOrigin } from "./http";
 import { z } from "zod";
@@ -31,6 +31,16 @@ test("scrypt salt:hex team credentials fail closed", async () => {
   assert.equal(await verifyAccessCode("correct-code", stored), true);
   assert.equal(await verifyAccessCode("wrong", stored), false);
   assert.equal(await verifyAccessCode("correct-code", "malformed"), false);
+});
+
+test("generated team codes are readable, random, and verify against their hash", async () => {
+  const code = newAccessCode();
+  assert.match(code, /^CC-[A-HJ-NP-Z2-9]{10}$/);
+  assert.notEqual(code, newAccessCode());
+  const stored = await hashAccessCode(code);
+  assert.notEqual(stored, await hashAccessCode(code));
+  assert.equal(await verifyAccessCode(code, stored), true);
+  assert.equal(await verifyAccessCode(newAccessCode(), stored), false);
 });
 
 test("L5 intentionally filters exact case-sensitive strings only", () => {

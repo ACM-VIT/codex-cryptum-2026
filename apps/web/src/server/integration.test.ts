@@ -15,6 +15,7 @@ vi.mock("./better-auth", () => ({
 import { getDb, closeDb, teams, sessions, messages, submissions, solves, sandboxTeams, exploitEvents, chatOperations } from "@cryptum/db";
 import { and, eq, sql } from "drizzle-orm";
 import { POST as join, GET as session } from "../app/api/session/route";
+import { POST as createTeam } from "../app/api/teams/route";
 import { POST as submit } from "../app/api/challenges/[id]/submissions/route";
 import { POST as chat } from "../app/api/challenges/[id]/messages/route";
 import { DELETE as resetConversation } from "../app/api/challenges/[id]/conversation/route";
@@ -101,6 +102,38 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
     expect(await (await session(request("session", "GET", {}, "other-google-user"))).json()).toBeNull();
     expect((await submit(request("challenges/5/submissions", "POST", { flag: "guess" }, "other-google-user"), id("5"))).status).toBe(401);
     expect((await submit(request("challenges/5/submissions", "POST", { flag: "guess" }, null), id("5"))).status).toBe(401);
+  });
+
+  it("lets a Google user create one team whose shared code admits teammates", async () => {
+    const creator = `test-google-${randomUUID()}`;
+    const teammate = `test-google-${randomUUID()}`;
+    const teamName = `Created ${randomUUID().slice(0, 8)}`;
+    try {
+      expect((await createTeam(request("teams", "POST", { teamName }, null, ""))).status).toBe(401);
+      expect((await createTeam(request("teams", "POST", { teamName: "x" }, creator, ""))).status).toBe(400);
+      expect((await createTeam(request("teams", "POST", { teamName: "bad\u0007name" }, creator, ""))).status).toBe(400);
+      const created = await createTeam(request("teams", "POST", { teamName }, creator, ""));
+      expect(created.status).toBe(201);
+      const result = await created.json();
+      expect(result.accessCode).toMatch(/^CC-[A-HJ-NP-Z2-9]{10}$/);
+      expect(result.session.teamName).toBe(teamName);
+      const [cookie] = created.headers.get("set-cookie")?.split(";") ?? [];
+      if (!cookie) throw new Error("Expected creator team session cookie");
+      expect((await (await session(request("session", "GET", {}, creator, cookie))).json()).id).toBe(result.session.id);
+      const [stored] = await getDb().select().from(teams).where(eq(teams.id, result.session.id));
+      expect(stored?.createdBy).toBe(creator);
+      expect(stored?.accessCodeHash).not.toContain(result.accessCode);
+      const again = await createTeam(request("teams", "POST", { teamName: `${teamName} 2` }, creator, ""));
+      expect(again.status).toBe(409);
+      expect((await again.json()).error).toBe("You have already created a team");
+      const taken = await createTeam(request("teams", "POST", { teamName }, teammate, ""));
+      expect(taken.status).toBe(409);
+      expect((await taken.json()).error).toBe("Team name is taken");
+      expect((await join(request("session", "POST", { teamName, accessCode: result.accessCode }, teammate, ""))).status).toBe(200);
+      expect((await join(request("session", "POST", { teamName, accessCode: "CC-WRONGCODE" }, teammate, ""))).status).toBe(403);
+    } finally {
+      await getDb().delete(teams).where(eq(teams.createdBy, creator));
+    }
   });
 
   it("accepts only the current team's HMAC flag and awards one immutable solve", async () => {
