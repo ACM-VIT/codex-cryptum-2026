@@ -1,0 +1,6 @@
+/* This package's export map appends .css to each font subpath. */
+@import "@fontsource/big-shoulders-display/latin-500";
+@import "@fontsource/big-shoulders-display/latin-600";
+@import "@fontsource/big-shoulders-display/latin-700";
+@import "@fontsource/big-shoulders-display/latin-800";
+@import "@fontsource/big-shoulders-display/latin-900";
