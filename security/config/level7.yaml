@@ -1,0 +1,15 @@
+challenge_id: 7
+model: qwen3:8b
+security:
+  input_classifier:
+    enabled: true
+    action: block
+    threshold: 0.75
+    model_id: protectai/deberta-v3-base-prompt-injection-v2
+    revision: 90c9989b1a342275dd0d1a95aad283c04e075671
+  output_classifier:
+    enabled: false
+    model_id: cross-encoder/nli-MiniLM2-L6-H768
+    revision: b95119ce93d3e065de6214e38cd4a97b0f2f2c6d
+  system_prompt_protection: true
+  team_specific_flags: false

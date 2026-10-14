@@ -1,0 +1,5 @@
+# Run from the repository root; uv.lock is the fully reproducible lockfile.
+# CPU-only torch wheels come from this additional index when using pip.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.9.1+cpu
+-e .[ml,dev]
