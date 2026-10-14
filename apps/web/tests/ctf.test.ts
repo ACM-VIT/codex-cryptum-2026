@@ -75,9 +75,15 @@ describe("participant API boundary", () => {
   });
 
   it("confirms the server ended the team session", async () => {
+    const fetcher = mockResponse({ ok: true, deleted: false });
+    await expect(api.leave()).resolves.toEqual({ ok: true, deleted: false });
+    expect(fetcher).toHaveBeenCalledWith("/api/session", expect.objectContaining({ method: "DELETE", body: JSON.stringify({ confirmDelete: false }) }));
+  });
+
+  it("logs out without leaving the team", async () => {
     const fetcher = mockResponse({ ok: true });
-    await expect(api.leave()).resolves.toBeUndefined();
-    expect(fetcher).toHaveBeenCalledWith("/api/session", expect.objectContaining({ method: "DELETE" }));
+    await expect(api.logout()).resolves.toBeUndefined();
+    expect(fetcher).toHaveBeenCalledWith("/api/session/logout", expect.objectContaining({ method: "POST" }));
   });
 
   it.each([

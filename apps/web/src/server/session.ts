@@ -1,7 +1,7 @@
 import "server-only";
 import { getDb, teams, sessions, solves, messages } from "@cryptum/db";
 import { user as authUser } from "@cryptum/db/auth-schema";
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, ne } from "drizzle-orm";
 import { sessionSchema, teamDetailsSchema, type Session, type TeamDetails } from "@cryptum/contracts";
 import { requireGoogleUser } from "./better-auth";
 import { digest, hashAccessCode, newAccessCode, newToken, verifyAccessCode } from "./security";
@@ -104,8 +104,26 @@ export async function teamDetails(request: Request): Promise<TeamDetails> {
   return teamDetailsSchema.parse({ members: rows.map((row) => ({ name: row.name, you: row.id === viewer.id, creator: row.id === team?.createdBy })) });
 }
 
-export async function leaveTeam(request: Request): Promise<void> {
+export async function leaveTeam(request: Request, confirmDelete = false): Promise<{ deleted: boolean }> {
   const user = await requireGoogleUser(request.headers);
   const token = cookieToken(request);
-  if (token) await getDb().delete(sessions).where(and(eq(sessions.tokenHash, digest(token)), eq(sessions.userId, user.id)));
+  if (!token) return { deleted: false };
+  return getDb().transaction(async (tx) => {
+    const [membership] = await tx.select({ teamId: sessions.teamId }).from(sessions)
+      .where(and(eq(sessions.tokenHash, digest(token)), eq(sessions.userId, user.id))).limit(1);
+    if (!membership) return { deleted: false };
+    await tx.select({ id: teams.id }).from(teams).where(eq(teams.id, membership.teamId)).for("update");
+    const [other] = await tx.select({ id: sessions.id }).from(sessions)
+      .where(and(eq(sessions.teamId, membership.teamId), ne(sessions.userId, user.id))).limit(1);
+    if (!other && !confirmDelete) throw new HttpError(409, "You are the last member. Leaving will delete this team.");
+    await tx.delete(sessions).where(and(eq(sessions.teamId, membership.teamId), eq(sessions.userId, user.id)));
+    if (!other) await tx.delete(teams).where(eq(teams.id, membership.teamId));
+    return { deleted: !other };
+  });
+}
+
+export async function endSession(request: Request): Promise<void> {
+  const user = await requireGoogleUser(request.headers);
+  const token = cookieToken(request);
+  if (token) await getDb().update(sessions).set({ expiresAt: new Date() }).where(and(eq(sessions.tokenHash, digest(token)), eq(sessions.userId, user.id)));
 }

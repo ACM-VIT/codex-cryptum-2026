@@ -72,7 +72,8 @@ export interface CtfApi {
   join(teamName: string, accessCode: string): Promise<Session>;
   createTeam(teamName: string): Promise<CreatedTeam>;
   team(): Promise<TeamDetails>;
-  leave(): Promise<void>;
+  leave(confirmDelete?: boolean): Promise<{ deleted: boolean }>;
+  logout(): Promise<void>;
   challenges(): Promise<Challenge[]>;
   chat(id: number, content: string): Promise<Session>;
   reset(id: number): Promise<Session>;

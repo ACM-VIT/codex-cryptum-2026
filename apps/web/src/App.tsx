@@ -41,7 +41,7 @@ export function App({ children }: { children: ReactNode }) {
   const logOut = async () => {
     try {
       await transact(async () => {
-        if (session) await api.leave();
+        if (session) await api.logout();
         await authClient.signOut();
       });
       setSession(null);

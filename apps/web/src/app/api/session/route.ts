@@ -18,8 +18,9 @@ export const POST = endpoint(async (request) => {
 });
 export const DELETE = endpoint(async (request) => {
   sameOrigin(request);
-  await leaveTeam(request);
-  const response = json({ ok: true });
+  const input = await body(request, z.object({ confirmDelete: z.boolean().optional() }).strict());
+  const { deleted } = await leaveTeam(request, input.confirmDelete);
+  const response = json({ ok: true, deleted });
   response.headers.set("Set-Cookie", sessionCookie("", true));
   return response;
 });

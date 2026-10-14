@@ -15,7 +15,8 @@ vi.mock("./better-auth", () => ({
 import { getDb, closeDb, teams, sessions, messages, submissions, solves, sandboxTeams, exploitEvents, chatOperations } from "@cryptum/db";
 import { user as authUser } from "@cryptum/db/auth-schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { POST as join, GET as session } from "../app/api/session/route";
+import { POST as join, GET as session, DELETE as leave } from "../app/api/session/route";
+import { POST as logout } from "../app/api/session/logout/route";
 import { POST as createTeam } from "../app/api/teams/route";
 import { GET as team } from "../app/api/team/route";
 import { POST as submit } from "../app/api/challenges/[id]/submissions/route";
@@ -146,6 +147,38 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
     } finally {
       await getDb().delete(teams).where(eq(teams.createdBy, creator));
       await getDb().delete(authUser).where(inArray(authUser.id, [creator, teammate]));
+    }
+  });
+
+  it("keeps membership on log out and deletes a team only when its confirmed last member leaves", async () => {
+    const creator = `test-google-${randomUUID()}`;
+    const teammate = `test-google-${randomUUID()}`;
+    const teamName = `Leaving ${randomUUID().slice(0, 8)}`;
+    const cookieFrom = (response: Response) => {
+      const [cookie] = response.headers.get("set-cookie")?.split(";") ?? [];
+      if (!cookie) throw new Error("Expected team session cookie");
+      return cookie;
+    };
+    try {
+      const created = await createTeam(request("teams", "POST", { teamName }, creator, ""));
+      const { accessCode, session: { id: createdId } } = await created.json();
+      const creatorCookie = cookieFrom(created);
+      const teammateCookie = cookieFrom(await join(request("session", "POST", { teamName, accessCode }, teammate, "")));
+      expect((await logout(request("session/logout", "POST", {}, teammate, teammateCookie))).status).toBe(200);
+      expect(await (await session(request("session", "GET", {}, teammate, teammateCookie))).json()).toBeNull();
+      expect(await getDb().select().from(sessions).where(and(eq(sessions.teamId, createdId), eq(sessions.userId, teammate)))).toHaveLength(1);
+      const creatorLeft = await leave(request("session", "DELETE", {}, creator, creatorCookie));
+      expect(await creatorLeft.json()).toEqual({ ok: true, deleted: false });
+      const teammateCookieAgain = cookieFrom(await join(request("session", "POST", { teamName, accessCode }, teammate, "")));
+      const unconfirmed = await leave(request("session", "DELETE", {}, teammate, teammateCookieAgain));
+      expect(unconfirmed.status).toBe(409);
+      expect(await getDb().select().from(teams).where(eq(teams.id, createdId))).toHaveLength(1);
+      const confirmed = await leave(request("session", "DELETE", { confirmDelete: true }, teammate, teammateCookieAgain));
+      expect(await confirmed.json()).toEqual({ ok: true, deleted: true });
+      expect(await getDb().select().from(teams).where(eq(teams.id, createdId))).toHaveLength(0);
+      expect(await getDb().select().from(sessions).where(eq(sessions.teamId, createdId))).toHaveLength(0);
+    } finally {
+      await getDb().delete(teams).where(eq(teams.createdBy, creator));
     }
   });
 

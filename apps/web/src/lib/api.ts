@@ -72,8 +72,10 @@ const live: CtfApi = {
   createTeam: (teamName) =>
     request("/teams", createdTeamSchema, "POST", { teamName }, [409]),
   team: () => request("/team", teamDetailsSchema),
-  leave: async () => {
-    await request("/session", z.object({ ok: z.literal(true) }), "DELETE");
+  leave: (confirmDelete = false) =>
+    request("/session", z.object({ ok: z.literal(true), deleted: z.boolean() }), "DELETE", { confirmDelete }, [409]),
+  logout: async () => {
+    await request("/session/logout", z.object({ ok: z.literal(true) }), "POST", {});
   },
   challenges: () => request("/challenges", z.array(challengeSchema)),
   chat: (id, content) =>
