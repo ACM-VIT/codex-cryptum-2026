@@ -127,8 +127,9 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
       expect(stored?.createdBy).toBe(creator);
       expect(stored?.accessCodeHash).not.toContain(result.accessCode);
       const again = await createTeam(request("teams", "POST", { teamName: `${teamName} 2` }, creator, ""));
-      expect(again.status).toBe(409);
-      expect((await again.json()).error).toBe("You have already created a team");
+      expect(again.status).toBe(201);
+      expect((await again.json()).session.teamName).toBe(`${teamName} 2`);
+      expect(await getDb().select().from(teams).where(eq(teams.createdBy, creator))).toHaveLength(2);
       const taken = await createTeam(request("teams", "POST", { teamName }, teammate, ""));
       expect(taken.status).toBe(409);
       expect((await taken.json()).error).toBe("Team name is taken");

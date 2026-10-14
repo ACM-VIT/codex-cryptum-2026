@@ -1,0 +1,1 @@
+ALTER TABLE "teams" DROP CONSTRAINT "teams_created_by_unique";
