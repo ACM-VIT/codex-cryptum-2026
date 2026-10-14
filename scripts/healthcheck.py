@@ -1,6 +1,10 @@
 import argparse
 import json
+import os
+import platform
 import re
+import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -10,10 +14,6 @@ import urllib.request
 OLLAMA = "http://127.0.0.1:11434"
 EXPECTED_ENV = {
     "OLLAMA_NUM_PARALLEL": "4",
-    "OLLAMA_MAX_QUEUE": "32",
-    "OLLAMA_KEEP_ALIVE": "-1",
-    "OLLAMA_MAX_LOADED_MODELS": "1",
-    "OLLAMA_FLASH_ATTENTION": "1",
     "OLLAMA_KV_CACHE_TYPE": "q8_0",
 }
 
@@ -75,30 +75,49 @@ def check_ollama(model):
     return out
 
 
+def runner_args():
+    out = sh("ps", "-A", "-o", "args=")
+    return [line for line in out.splitlines() if "llama-server" in line or "ollama runner" in line]
+
+
 def check_env():
-    bad = []
-    for key, want in EXPECTED_ENV.items():
-        have = sh("launchctl", "getenv", key).strip()
-        if have != want:
-            bad.append(f"{key}={have or 'unset'} (want {want})")
-    pid = sh("pgrep", "-f", "Ollama.app/Contents/Resources/ollama serve").split()
-    live = sh("ps", "eww", "-p", pid[0]) if pid else ""
-    stale = [k for k, v in EXPECTED_ENV.items() if f"{k}={v}" not in live]
-    if bad:
-        return [(FAIL, "settings", "; ".join(bad) + ". run: ./scripts/ollama_env.sh apply")]
-    if pid and stale:
-        return [(FAIL, "settings", "set but the running server predates them. run: ./scripts/ollama_env.sh apply")]
-    return [(PASS, "settings", "parallel 4, queue 32, keep-alive forever, q8_0 KV")]
+    runners = runner_args()
+    if not runners:
+        return [(WARN, "settings", "no model runner running; load the model, then re-check")]
+    args = " ".join(runners)
+    parallel = re.search(r"(?:-np|--parallel) (\d+)", args)
+    kv = re.search(r"--cache-type-k (\S+)", args)
+    problems = []
+    if not parallel or parallel.group(1) != EXPECTED_ENV["OLLAMA_NUM_PARALLEL"]:
+        problems.append(f"parallel {parallel.group(1) if parallel else 'unknown'} (want {EXPECTED_ENV['OLLAMA_NUM_PARALLEL']})")
+    if kv and kv.group(1) != EXPECTED_ENV["OLLAMA_KV_CACHE_TYPE"]:
+        problems.append(f"KV cache {kv.group(1)} (want {EXPECTED_ENV['OLLAMA_KV_CACHE_TYPE']})")
+    if problems:
+        return [(FAIL, "settings", "; ".join(problems) + ". run: ./scripts/ollama_env.sh apply")]
+    return [(PASS, "settings", f"parallel {parallel.group(1)}" + (f", {kv.group(1)} KV" if kv else ""))]
+
+
+def lan_ip():
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("192.0.2.1", 9))
+            return sock.getsockname()[0]
+    except OSError:
+        return None
 
 
 def check_listen():
-    out = sh("lsof", "-nP", "-iTCP:11434", "-sTCP:LISTEN")
-    addrs = set(re.findall(r"TCP (\S+):11434", out))
-    if not addrs:
-        return [(FAIL, "ollama exposure", "nothing listening on 11434")]
-    if addrs <= {"127.0.0.1", "[::1]", "localhost"}:
-        return [(PASS, "ollama exposure", "localhost only")]
-    return [(FAIL, "ollama exposure", f"listening on {', '.join(sorted(addrs))}; unset OLLAMA_HOST and restart Ollama")]
+    ip = lan_ip()
+    if not ip or ip.startswith("127."):
+        return [(WARN, "ollama exposure", "no network address found; could not check")]
+    try:
+        with socket.create_connection((ip, 11434), timeout=2):
+            exposed = True
+    except OSError:
+        exposed = False
+    if exposed:
+        return [(FAIL, "ollama exposure", f"reachable on {ip}:11434; unset OLLAMA_HOST and restart Ollama")]
+    return [(PASS, "ollama exposure", f"not reachable on {ip}:11434 (localhost only)")]
 
 
 def check_gate(gate, model, timeout):
@@ -141,32 +160,84 @@ def check_gate(gate, model, timeout):
     return out
 
 
+def read(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def power_status():
+    system = platform.system()
+    if system == "Darwin":
+        batt = sh("pmset", "-g", "batt")
+        pct = re.search(r"(\d+)%", batt)
+        return "AC Power" in batt, pct.group(1) if pct else None
+    if system == "Linux":
+        base = "/sys/class/power_supply"
+        names = os.listdir(base) if os.path.isdir(base) else []
+        mains = [n for n in names if read(f"{base}/{n}/type") == "Mains"]
+        batteries = [n for n in names if read(f"{base}/{n}/type") == "Battery"]
+        if not batteries:
+            return True, None
+        on_ac = any(read(f"{base}/{n}/online") == "1" for n in mains)
+        return on_ac, read(f"{base}/{batteries[0]}/capacity") or None
+    return None, None
+
+
+def sleep_inhibited():
+    if platform.system() == "Darwin":
+        return bool(sh("pgrep", "-x", "caffeinate").strip()), "caffeinate -dimsu &"
+    if shutil.which("systemd-inhibit"):
+        listing = sh("systemd-inhibit", "--list", "--no-pager")
+        return bool(re.search(r"\bsleep\b", listing)), "systemd-inhibit --what=sleep:idle sleep infinity &"
+    return None, ""
+
+
+def memory_status():
+    if platform.system() == "Darwin":
+        free = re.search(r"free percentage: (\d+)%", sh("memory_pressure"))
+        swap = re.search(r"used = ([\d.]+)M", sh("sysctl", "vm.swapusage"))
+        if not free:
+            return None, None
+        return int(free.group(1)), float(swap.group(1)) / 1024 if swap else 0.0
+    info = {}
+    for line in read("/proc/meminfo").splitlines():
+        key, _, rest = line.partition(":")
+        if rest.split():
+            info[key] = int(rest.split()[0])
+    if "MemTotal" not in info or "MemAvailable" not in info:
+        return None, None
+    swap = (info.get("SwapTotal", 0) - info.get("SwapFree", 0)) / 2**20
+    return round(100 * info["MemAvailable"] / info["MemTotal"]), swap
+
+
 def check_host():
     out = []
-    batt = sh("pmset", "-g", "batt")
-    if "AC Power" in batt:
-        out.append((PASS, "power", "on AC"))
+    on_ac, pct = power_status()
+    if on_ac is None:
+        out.append((WARN, "power", "could not read power state on this OS"))
+    elif on_ac:
+        out.append((PASS, "power", "on AC" if pct else "on AC (no battery)"))
     else:
-        pct = re.search(r"(\d+)%", batt)
-        out.append((FAIL, "power", f"on battery{f' ({pct.group(1)}%)' if pct else ''}; plug in the charger"))
+        out.append((FAIL, "power", f"on battery{f' ({pct}%)' if pct else ''}; plug in the charger"))
 
-    if sh("pgrep", "-x", "caffeinate").strip():
-        out.append((PASS, "sleep", "caffeinate running"))
+    inhibited, hint = sleep_inhibited()
+    if inhibited is None:
+        out.append((WARN, "sleep", "could not check; make sure the machine cannot sleep"))
+    elif inhibited:
+        out.append((PASS, "sleep", "sleep inhibited"))
     else:
-        out.append((WARN, "sleep", "no caffeinate; run: caffeinate -dimsu &"))
+        out.append((WARN, "sleep", f"nothing preventing sleep; run: {hint}"))
 
-    free = re.search(r"free percentage: (\d+)%", sh("memory_pressure"))
-    swap = re.search(r"used = ([\d.]+)M", sh("sysctl", "vm.swapusage"))
-    if free:
-        pct = int(free.group(1))
-        used = float(swap.group(1)) / 1024 if swap else 0
-        status = PASS if pct >= 20 and used < 2 else WARN if pct >= 10 else FAIL
-        out.append((status, "memory", f"{pct}% free, {used:.1f} GB swap" + ("" if status == PASS else "; quit other apps")))
+    pct_free, swap_gb = memory_status()
+    if pct_free is not None:
+        status = PASS if pct_free >= 20 and swap_gb < 2 else WARN if pct_free >= 10 else FAIL
+        out.append((status, "memory", f"{pct_free}% free, {swap_gb:.1f} GB swap" + ("" if status == PASS else "; quit other apps")))
 
-    disk = sh("df", "-g", "/").splitlines()
-    if len(disk) > 1:
-        avail = int(disk[1].split()[3])
-        out.append((PASS if avail >= 5 else WARN, "disk", f"{avail} GB free"))
+    avail = shutil.disk_usage(os.path.expanduser("~")).free / 2**30
+    out.append((PASS if avail >= 5 else WARN, "disk", f"{avail:.0f} GB free"))
     return out
 
 
