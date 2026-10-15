@@ -1,0 +1,26 @@
+{
+  "name": "codex-cryptum-2026",
+  "private": true,
+  "packageManager": "pnpm@12.11.2",
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @cryptum/web dev",
+    "build": "pnpm --filter @cryptum/web build",
+    "start": "pnpm --filter @cryptum/web start",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "oxlint --deny-warnings apps/web/src apps/web/tests packages",
+    "test": "pnpm -r --if-present test",
+    "test:db": "pnpm --filter @cryptum/web test:db",
+    "db:generate": "pnpm --filter @cryptum/db generate",
+    "db:migrate": "pnpm --filter @cryptum/db migrate",
+    "db:seed": "pnpm --filter @cryptum/db seed"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "oxlint": "^1.88.0"
+  }
+}

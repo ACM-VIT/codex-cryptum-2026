@@ -1,45 +1,104 @@
-# Codex-Cryptum-2026
+# Codex Cryptum 2026
 
-Collaborative ten-level LLM prompt-injection CTF. This repository currently implements
-**only Akhand's Level 7, Level 8, and shared LLM security responsibilities**.
-Other levels, the backend, authentication, scoring, persistence, and frontend remain
-owned by their respective teammates.
+A prompt-injection CTF built with Next.js, PostgreSQL, Drizzle, Better Auth, and the Vercel AI SDK. Uses pnpm workspaces.
 
-The importable Python package and integration instructions are in
-[security/README.md](security/README.md).
+## Run
 
-```text
-security/
-  classifiers/   Pinned, CPU-only input and output ML strategies
-  flags/         Trusted internal HMAC derivation and team-aware verification
-  guardrails/    Policies, context binding, protected prompts, inference pipeline
-  config/        Validated Level 7 and Level 8 YAML configurations
-  adapters/      Inference protocol and minimal non-streaming Ollama client
-  tests/         Model-independent pytest suite
-  evaluation/    Labeled datasets, evaluation harness, measured results
-  examples/      Local CLI demonstration
-pyproject.toml   Package, dependencies, lint and test configuration
-uv.lock          Reproducible dependencies, including CPU PyTorch
+```sh
+pnpm install
+cp .env.example .env   # skip if .env already exists
+# Fill in the settings below.
+pnpm db:migrate
+pnpm db:seed
+pnpm dev
 ```
 
-Supported Python versions are **3.11 and 3.12**. From the repository root, with uv
-installed, these shell-independent commands target Linux and Apple Silicon macOS
-(macOS validation is pending CI):
+Open **http://localhost:3000**. Sign in with Google, then join **Demo Team** using `DEV_TEAM_ACCESS_CODE` from your local `.env`.
+
+Use Node.js 26 and pnpm 12.11.2. The app uses Next.js 16.4.1, React 19.3.1, and TypeScript 7. Dependencies are recorded in `pnpm-lock.yaml`.
+
+## Settings
+
+Keep these in the root `.env`. Never commit it.
+
+| Setting | Purpose |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `BETTER_AUTH_URL` | App URL; locally `http://localhost:3000` |
+| `BETTER_AUTH_SECRET` | Random secret, at least 32 characters |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth web client |
+| `LLM_API_KEY` | Model provider key |
+| `LLM_BASE_URL` | OpenAI-compatible base URL, e.g. `https://api.openai.com/v1` |
+| `LLM_MODEL` | `gpt-6-luna` |
+| `FLAG_SECRET` | Independent random secret, at least 32 bytes |
+| `DEV_TEAM_ACCESS_CODE` | Development team's access code |
+| `ORGANIZER_TOKEN` | Independent secret for resetting the sandbox |
+
+Register this redirect URI in your Google OAuth client:
+
+```text
+http://localhost:3000/api/auth/callback/google
+```
+
+For deployment, use your HTTPS domain in both `BETTER_AUTH_URL` and the Google redirect URI. Missing credentials produce an error, not a demo fallback.
+
+## Layout
+
+```text
+apps/web             UI, API routes, authentication, challenge execution
+packages/challenges  Public catalog and server-only defense policies
+packages/contracts   Shared TypeScript types and Zod schemas
+packages/db          Drizzle tables, migrations, development seed
+```
+
+See [docs/challenges.md](docs/challenges.md) to understand or add a challenge. [docs/integration.md](docs/integration.md) lists the original contributions. Component and font credits are in [apps/web/THIRD_PARTY.md](apps/web/THIRD_PARTY.md).
+
+## Checks
+
+```sh
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+pnpm test:db   # optional; use a disposable development database
+```
+
+Database tests temporarily edit sandbox state and restore it. CI runs the first four checks.
+
+## Database
+
+- `pnpm db:generate`: generate SQL after a schema change; review it before applying.
+- `pnpm db:migrate`: apply committed migrations.
+- `pnpm db:seed`: synchronize development challenge metadata and seed the demo team. Existing points, availability, and progress are preserved.
+
+The provisioned Neon database is project **`dry-band-16656722`**, branch **`development`**, database **`cryptum`**, region **`aws-ap-southeast-1`**, PostgreSQL **17**. Its connection string is only in the ignored local `.env`. Migrations and seed have been applied.
+
+**Safety:** the leaderboard sandbox is intentionally vulnerable. Sandbox edits cannot directly change official scores. Challenge filters are puzzle mechanics, not protections for real secrets.
+
+## Level 7/8 Python guardrail component
+
+Akhand's framework-independent Python package lives in `security/`: independent CPU
+input classification for Levels 7 and 8, Level 8 output classification, team-specific
+HMAC flags, trusted system prompts and fail-closed policy enforcement. Model weights
+are pretrained and unchanged. The package targets Python 3.11/3.12.
+
+See [security/README.md](security/README.md) for the package layout and interfaces,
+[security/DEPLOYMENT.md](security/DEPLOYMENT.md) for model preparation/lifecycle and
+integration contracts, and [security/PORTABILITY_REPORT.md](security/PORTABILITY_REPORT.md)
+for platform evidence and limitations.
 
 ```text
 uv sync --locked --python 3.12 --extra ml --extra dev
-uv run python -m pytest -q
-uv run ruff check security
-uv run ruff format --check security
+uv run --no-sync python -m pytest -q -m "not integration"
+uv run --no-sync ruff check security
 uv build --wheel
-uv run python -m security --mock-classifiers
 ```
 
-The last command uses explicit classifier fixtures to test wiring without downloaded
-models. Remove `--mock-classifiers` to use the real classifiers; add `--ollama` to use
-the locally installed `qwen3:8b`. See the package README for evaluation and production
-configuration. Native local ML dependencies are available for Linux and Apple Silicon;
-Intel macOS can install the core/QA package with `--extra dev` and has an upstream
-PyTorch wheel limitation. See [portability findings and tested platforms](security/PORTABILITY_REPORT.md)
-and [Linux/macOS setup](security/README.md#portable-installation-on-linux-and-macos).
-No commits or pushes are performed by these commands.
+The Next.js application and Python guardrails use separate configuration schemas:
+root `.env` belongs to the application; optional `security/.env` contains only the
+Python keys from `security/.env.example`. Both local files must remain untracked.
+The planned private Python transport wrapper and Next.js wiring are backend/hosting
+integration dependencies; they are not implemented by this package. The existing
+Next.js provider settings do not automatically change the Python Ollama adapter or
+HMAC derivation. The Python work does not implement authentication, scoring, or any
+other challenge levels.

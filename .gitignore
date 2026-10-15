@@ -1,3 +1,20 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.neon
+.DS_Store
+*.log
+.vercel/
+.pnpm-store/
+*.pem
+*.key
+
 .venv/
 .bootstrap/
 __pycache__/
@@ -8,10 +25,6 @@ __pycache__/
 .coverage
 htmlcov/
 build/
-dist/
-.env
-.env.*
-!.env.example
 !security/.env.example
 .cache/
 models/
@@ -20,5 +33,4 @@ models/
 *.pth
 *.onnx
 *.bin
-*.log
 evaluation-local*.json
