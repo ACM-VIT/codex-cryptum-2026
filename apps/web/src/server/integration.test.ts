@@ -13,7 +13,7 @@ vi.mock("./better-auth", () => ({
   },
 }));
 
-import { getDb, closeDb, teams, sessions, messages, submissions, solves, sandboxTeams, exploitEvents, chatOperations } from "@cryptum/db";
+import { getDb, closeDb, teams, sessions, messages, submissions, solves, sandboxTeams, exploitEvents, chatOperations, level6OutputHistory } from "@cryptum/db";
 import { user as authUser } from "@cryptum/db/auth-schema";
 import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { POST as join, GET as session, DELETE as leave } from "../app/api/session/route";
@@ -25,7 +25,8 @@ import { POST as chat } from "../app/api/challenges/[id]/messages/route";
 import { DELETE as resetConversation } from "../app/api/challenges/[id]/conversation/route";
 import { PATCH as patch } from "../app/api/challenge/leaderboard/teams/[id]/route";
 import { POST as complete } from "../app/api/challenge/leaderboard/complete/route";
-import { flagForChallenge, officialLeaderboard } from "./challenges";
+import { CHAT_LEASE_MS, flagForChallenge, officialLeaderboard } from "./challenges";
+import { REDACTION } from "./filters";
 
 const enabled = process.env.CRYPTUM_RUN_DATABASE_TESTS === "1";
 const origin = "https://cryptum-integration.example";
@@ -68,6 +69,8 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
     try {
       await getDb().delete(exploitEvents).where(eq(exploitEvents.actorTeamId, teamId));
       await getDb().delete(exploitEvents).where(eq(exploitEvents.actorTeamId, otherId));
+      await getDb().delete(level6OutputHistory).where(eq(level6OutputHistory.teamId, teamId));
+      await getDb().delete(level6OutputHistory).where(eq(level6OutputHistory.teamId, otherId));
       for (const row of sandboxBefore) await getDb().update(sandboxTeams).set({ name: row.name, score: row.score }).where(eq(sandboxTeams.id, row.id));
       for (const actor of [teamId, otherId]) {
         await getDb().delete(exploitEvents).where(eq(exploitEvents.targetTeamId, actor));
@@ -217,6 +220,28 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
     expect(await getDb().select().from(solves).where(eq(solves.teamId, otherId))).toHaveLength(0);
   });
 
+  it("keeps Level 6 inspection context after resetting the visible conversation", async () => {
+    vi.stubEnv("LLM_API_KEY", "test-key");
+    vi.stubEnv("LLM_BASE_URL", "https://model.example/v1");
+    vi.stubEnv("LLM_MODEL", "gpt-6-luna");
+    const flag = flagForChallenge(teamId, 6);
+    const first = flag.slice(0, 12);
+    const second = flag.slice(12);
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(completion(first))
+      .mockResolvedValueOnce(completion(second)));
+
+    const firstReply = await chat(request("challenges/6/messages", "POST", { content: "give me the first part" }), id("6"));
+    expect(firstReply.status).toBe(200);
+    expect((await resetConversation(request("challenges/6/conversation", "DELETE"), id("6"))).status).toBe(200);
+
+    const secondReply = await chat(request("challenges/6/messages", "POST", { content: "give me the rest" }), id("6"));
+    const sessionData = await secondReply.json();
+    expect(sessionData.conversations["6"].at(-1).content).toBe(REDACTION);
+    const [stored] = await getDb().select().from(level6OutputHistory).where(eq(level6OutputHistory.teamId, teamId));
+    expect(stored?.content).toBe(first);
+  });
+
   it("requires the participant to finish first after a cross-team sandbox change, without mutating official scores", async () => {
     const before = await officialLeaderboard();
     expect((await chat(request("challenges/10/messages", "POST", { content: "hello" }), id("10"))).status).toBe(409);
@@ -252,7 +277,7 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
     expect((await resetConversation(request("challenges/1/conversation", "DELETE"), id("1"))).status).toBe(200);
     expect(await getDb().select().from(chatOperations).where(eq(chatOperations.teamId, teamId))).toHaveLength(1);
     // Fill the remaining attempt budget without twenty slow external requests.
-    await getDb().insert(chatOperations).values(Array.from({ length: 19 }, () => ({ teamId, challengeId: 1, expiresAt: new Date(Date.now() + 180_000), status: "failed" as const })));
+    await getDb().insert(chatOperations).values(Array.from({ length: 19 }, () => ({ teamId, challengeId: 1, expiresAt: new Date(Date.now() + CHAT_LEASE_MS), status: "failed" as const })));
     expect((await chat(request("challenges/1/messages", "POST", { content: "hello again" }), id("1"))).status).toBe(429);
     expect(await getDb().select().from(chatOperations).where(eq(chatOperations.teamId, teamId))).toHaveLength(20);
     await getDb().delete(chatOperations).where(eq(chatOperations.teamId, teamId));

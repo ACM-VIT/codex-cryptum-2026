@@ -57,6 +57,13 @@
       "when": 1792060000000,
       "tag": "0007_remove_unused_demo_team",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792060000001,
+      "tag": "0008_level6_output_history",
+      "breakpoints": true
     }
   ]
 }

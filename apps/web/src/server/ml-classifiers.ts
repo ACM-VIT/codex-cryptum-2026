@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { HttpError } from "./http";
+import { CLASSIFIER_REQUEST_TIMEOUT_MS } from "./timeouts";
 
 export interface GuardClassifiers {
   input(level: 7 | 8, message: string): Promise<boolean>;
@@ -22,7 +23,7 @@ async function classify(path: string, payload: object): Promise<boolean> {
     const result = await fetch(`${base.replace(/\/$/, "")}${path}`, {
       method: "POST", cache: "no-store", redirect: "error",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(payload), signal: AbortSignal.timeout(35_000),
+      body: JSON.stringify(payload), signal: AbortSignal.timeout(CLASSIFIER_REQUEST_TIMEOUT_MS),
     });
     if (!result.ok) throw new Error("Classifier unavailable");
     const reader = result.body?.getReader();

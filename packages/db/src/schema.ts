@@ -69,6 +69,12 @@ export const messages = pgTable("messages", {
   check("messages_role_valid", sql`${table.role} IN ('user', 'assistant')`),
 ]);
 
+// Level 6 needs a bounded, team-scoped inspection tail that survives chat resets.
+export const level6OutputHistory = pgTable("level6_output_history", {
+  teamId: uuid("team_id").primaryKey().references(() => teams.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+});
+
 // A committed reservation survives provider failures and conversation resets.
 export const chatOperations = pgTable("chat_operations", {
   id: uuid("id").defaultRandom().primaryKey(),

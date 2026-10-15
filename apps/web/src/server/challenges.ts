@@ -1,11 +1,13 @@
 import "server-only";
-import { getDb, challenges, solves, messages, submissions, teams, chatOperations } from "@cryptum/db";
+import { getDb, challenges, solves, messages, submissions, teams, chatOperations, level6OutputHistory } from "@cryptum/db";
 import { challengeSchema, leaderboardSchema } from "@cryptum/contracts";
 import { and, asc, count, desc, eq, gt, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { HttpError } from "./http";
 import { equalSecret, flagFor } from "./security";
 import { runChallengeModel } from "./llm";
+import { appendL6InspectionHistory, REDACTION } from "./filters";
+import { CHAT_OPERATION_LEASE_MS } from "./timeouts";
 import { challengeConfig } from "./challenge-config";
 import { isLlmDefinition } from "@cryptum/challenges/server";
 import { snapshot } from "./session";
@@ -37,9 +39,9 @@ export async function catalog() {
   }));
 }
 
-// Three sequential provider calls can each take 45 seconds. A crashed request
-// releases its team after this lease without holding a database connection.
-const CHAT_LEASE_MS = 180_000;
+// The route allows up to 300 seconds for inference; the lease outlives it and
+// no database transaction stays open while providers are running.
+export const CHAT_LEASE_MS = CHAT_OPERATION_LEASE_MS;
 
 async function assertNoPendingChat(tx: Tx, teamId: string) {
   const [pending] = await tx.select({ id: chatOperations.id }).from(chatOperations).where(and(
@@ -61,19 +63,25 @@ export async function sendMessage(teamId: string, id: number, content: string) {
     if ((recent?.count ?? 0) >= 20) throw new HttpError(429, "Too many messages");
     const history = await tx.select({ role: messages.role, content: messages.content }).from(messages)
       .where(and(eq(messages.teamId, teamId), eq(messages.challengeId, id))).orderBy(asc(messages.createdAt), asc(messages.id));
+    let filterHistory = "";
+    if (id === 6) {
+      const [stored] = await tx.select({ content: level6OutputHistory.content }).from(level6OutputHistory)
+        .where(eq(level6OutputHistory.teamId, teamId)).limit(1);
+      filterHistory = stored?.content ?? history.filter((turn) => turn.role === "assistant").map((turn) => turn.content).join("");
+    }
     const turns = history.filter((message) => message.role === "user").length;
     if (challenge.turnLimit !== null && turns >= challenge.turnLimit) throw new HttpError(409, "Turn budget exhausted. Reset the conversation.");
     if (history.length >= 200 || history.reduce((total, turn) => total + turn.content.length, 0) > 100_000) throw new HttpError(409, "Conversation full. Reset to continue.");
     const [operation] = await tx.insert(chatOperations).values({ teamId, challengeId: id, expiresAt: new Date(Date.now() + CHAT_LEASE_MS) }).returning({ id: chatOperations.id });
     if (!operation) throw new HttpError(503, "Could not reserve a reply");
-    return { operationId: operation.id, history };
+    return { operationId: operation.id, history, filterHistory };
   });
 
   try {
     // The attempt is already committed. Provider errors and resets cannot erase
     // the rate budget, and no transaction is open during these network calls.
     const flag = flagForChallenge(teamId, id);
-    const reply = await runChallengeModel({ definition, flag, history: reservation.history, message: content });
+    const reply = await runChallengeModel({ definition, flag, history: reservation.history, filterHistory: [reservation.filterHistory], message: content });
     const completed = await getDb().transaction(async (tx) => {
       await lock(tx, `chat:${teamId}`);
       const [operation] = await tx.update(chatOperations).set({ status: "completed" }).where(and(
@@ -86,6 +94,13 @@ export async function sendMessage(teamId: string, id: number, content: string) {
         { teamId, challengeId: id, role: "user", content, createdAt: new Date(now) },
         { teamId, challengeId: id, role: "assistant", content: reply, createdAt: new Date(now + 1) },
       ]);
+      if (id === 6 && reply !== REDACTION) {
+        const content = appendL6InspectionHistory(reservation.filterHistory, reply);
+        await tx.insert(level6OutputHistory).values({ teamId, content }).onConflictDoUpdate({
+          target: level6OutputHistory.teamId,
+          set: { content },
+        });
+      }
       return true;
     });
     if (!completed) throw new HttpError(409, "Reply reservation expired. Try again.");

@@ -8,6 +8,7 @@ import {
   teamDetailsSchema,
   type CtfApi,
 } from "./contracts";
+import { BROWSER_REQUEST_TIMEOUT_MS } from "../server/timeouts";
 
 const base = "/api";
 
@@ -35,7 +36,7 @@ async function request<T>(
       cache: "no-store",
       headers: data ? { "Content-Type": "application/json" } : undefined,
       body: data ? JSON.stringify(data) : undefined,
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(BROWSER_REQUEST_TIMEOUT_MS),
     });
   } catch {
     throw new ApiError("Connection lost. Check your connection and try again.");
