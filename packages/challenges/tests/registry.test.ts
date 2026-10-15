@@ -38,12 +38,12 @@ describe("challenge registry", () => {
     const matrix = [
       ["open", "none", "none"],
       ["private", "none", "none"],
-      ["vault", "none", "none"],
-      ["hardened", "keyword", "none"],
-      ["hardened", "none", "exact"],
-      ["hardened", "none", "normalized"],
-      ["hardened", "classifier", "none"],
-      ["hardened", "classifier", "classifier"],
+      ["notes", "none", "none"],
+      ["private", "keyword", "none"],
+      ["private", "none", "exact"],
+      ["private", "none", "normalized"],
+      ["private", "classifier", "none"],
+      ["private", "classifier", "classifier"],
       ["vault", "blocklist", "conversation"],
     ];
     const llm = challengeDefinitions.filter(isLlmDefinition);
