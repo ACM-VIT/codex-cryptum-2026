@@ -55,7 +55,7 @@ describe("challenge registry", () => {
     expect(getChallengeDefinition(10)).toEqual({ id: 10, execution: { kind: "sandbox" } });
     expect(getChallengeMetadata(10)).toMatchObject({ interaction: "sandbox", completionMethod: "sandbox", points: 1000, turnLimit: null });
     expect(getChallengeMetadata(10)?.description).toMatch(/isolated leaderboard sandbox/);
-    expect(getChallengeMetadata(10)?.description).toMatch(/cross-team score update/);
+    expect(getChallengeMetadata(10)?.description).toMatch(/your team to first place/i);
   });
 
   it("exports only public metadata without execution policies or secret values", () => {

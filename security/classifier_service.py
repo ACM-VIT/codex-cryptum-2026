@@ -120,6 +120,8 @@ class PrivateClassifierServer(ThreadingHTTPServer):
 class ClassifierHandler(BaseHTTPRequestHandler):
     server_version = "CryptumClassifier"
     sys_version = ""
+    max_body_bytes = 262144
+    max_rejected_body_drain_bytes = 1048576
 
     def setup(self):
         super().setup()
@@ -139,10 +141,27 @@ class ClassifierHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
         self.close_connection = True
 
+    def _drain_rejected_body(self):
+        lengths = self.headers.get_all("Content-Length", [])
+        if len(lengths) != 1 or self.headers.get("Transfer-Encoding"):
+            return
+        try:
+            remaining = int(lengths[0])
+        except ValueError:
+            return
+        if not 0 < remaining <= self.max_rejected_body_drain_bytes:
+            return
+        while remaining:
+            discarded = self.rfile.read(min(65536, remaining))
+            if not discarded:
+                break
+            remaining -= len(discarded)
+
     def _authorized(self):
         supplied = self.headers.get("Authorization", "").encode()
         if not hmac.compare_digest(supplied, b"Bearer " + self.server._token):
             self._json(401, {"error": "unauthorized"})
+            self._drain_rejected_body()
             return False
         return True
 
@@ -160,16 +179,23 @@ class ClassifierHandler(BaseHTTPRequestHandler):
         try:
             if self.path not in ("/classify-input", "/classify-output"):
                 self._json(404, {"error": "not_found"})
+                self._drain_rejected_body()
                 return
             if self.headers.get_content_type() != "application/json":
                 self._json(415, {"error": "json_required"})
+                self._drain_rejected_body()
                 return
             lengths = self.headers.get_all("Content-Length", [])
             if len(lengths) != 1 or self.headers.get("Transfer-Encoding"):
                 raise ValueError("Invalid request framing")
             size = int(lengths[0])
-            if not 0 < size <= 262144:
+            if not 0 < size <= self.max_body_bytes:
                 self._json(413, {"error": "invalid_size"})
+                # Leave modest rejected uploads readable until the client has
+                # finished sending, or closing with unread bytes can reset the
+                # connection before it receives the 413 response (notably on
+                # Windows). Large uploads are rejected without draining.
+                self._drain_rejected_body()
                 return
             raw = self.rfile.read(size)
             if len(raw) != size:
