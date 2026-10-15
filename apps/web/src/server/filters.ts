@@ -37,11 +37,14 @@ function representations(value: string): Set<string> {
   return candidates;
 }
 
+export function mentions(text: string, target: string): boolean {
+  const wanted = normalized(target);
+  return [...representations(text)].some((candidate) => normalized(candidate).includes(wanted));
+}
+
 /** Deliberate challenge weakness: inspect 512 Unicode codepoints, not the full response. */
 export function isL6Blocked(text: string, flag: string): boolean {
-  const inspected = Array.from(text).slice(0, INSPECTION_LIMIT).join("");
-  const target = normalized(flag);
-  return [...representations(inspected)].some((candidate) => normalized(candidate).includes(target));
+  return mentions(Array.from(text).slice(0, INSPECTION_LIMIT).join(""), flag);
 }
 
 const LEET: Record<string, string> = { "4": "a", "@": "a", "3": "e", "1": "i", "!": "i", "0": "o", "7": "t", "5": "s", "$": "s", "8": "b", "9": "g" };
