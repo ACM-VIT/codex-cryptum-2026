@@ -43,7 +43,7 @@ export const PromptInputBox = forwardRef<
     useLayoutEffect(() => {
       if (!textarea.current) return;
       textarea.current.style.height = "auto";
-      textarea.current.style.height = `${Math.min(240, Math.max(88, textarea.current.scrollHeight))}px`;
+      textarea.current.style.height = `${Math.min(96, Math.max(48, textarea.current.scrollHeight))}px`;
     }, [value]);
     const blocked = disabled || isLoading;
     return (
@@ -62,7 +62,7 @@ export const PromptInputBox = forwardRef<
           placeholder={placeholder}
           maxLength={4000}
           disabled={blocked}
-          rows={3}
+          rows={2}
           onKeyDown={(event) => {
             if (
               event.key === "Enter" &&
