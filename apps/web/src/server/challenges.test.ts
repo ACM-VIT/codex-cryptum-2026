@@ -26,11 +26,12 @@ function mockCatalog(rows: object[]) {
 }
 
 it("enriches catalog records with registry interaction without overriding database points", async () => {
-  mockCatalog(challengeCatalog.map((challenge) => ({ ...challenge, points: 42, interaction: undefined, completionMethod: undefined })));
+  mockCatalog(challengeCatalog.map(({ hidden: _hidden, ...challenge }) => ({ ...challenge, points: 42, interaction: undefined, completionMethod: undefined })));
   const result = await catalog();
-  expect(result.map((challenge) => challenge.points)).toEqual(Array(10).fill(42));
-  expect(result[9]).toMatchObject({ interaction: "sandbox", completionMethod: "sandbox" });
+  expect(result.map((challenge) => challenge.points)).toEqual(Array(9).fill(42));
+  expect(result.map((challenge) => challenge.id)).not.toContain(10);
   expect(result[0]).toMatchObject({ interaction: "chat", completionMethod: "flag" });
+  expect(JSON.stringify(result)).not.toMatch(/sandbox|hidden/);
   expect(JSON.stringify(result)).not.toMatch(/execution|promptPolicy|cdx\{|LLM_API_KEY/);
 });
 
