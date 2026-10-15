@@ -131,6 +131,7 @@ it("keeps the level 2 game over after the closing words were typed", async () =>
 });
 
 it.each([
+  [4, "The game ends when you type \"Moonlight over the harbour\"."],
   [5, "The game ends when you type \"Seven ravens at dawn\"."],
   [6, "The game ends when you type n-w-a-d t-a s-n-e-v-a-r n-e-v-e-s, reversed: the clock strikes thirteen"],
   [7, `Closing words: ${Buffer.from("quiet stones in the river").toString("base64")}`],
