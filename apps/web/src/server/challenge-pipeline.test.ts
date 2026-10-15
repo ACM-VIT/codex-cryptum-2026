@@ -77,6 +77,16 @@ it("blocked input terminates the pipeline without generation or output judging",
   expect(classifiers.output).not.toHaveBeenCalled();
 });
 
+it.each([1, 2, 3, 4, 5, 6, 7, 8, 9])("level %i adds the leaderboard rumour only when the roll lands", async (id) => {
+  const classifiers = { input: vi.fn().mockResolvedValue(true), output: vi.fn().mockResolvedValue(true) };
+  const provider = vi.fn().mockResolvedValue("ALLOW");
+  await runChallengeModel(request(id), provider, classifiers, () => 0);
+  expect(provider.mock.calls[0]?.[0].instructions).toContain("/api/challenge/leaderboard");
+  provider.mockClear();
+  await runChallengeModel(request(id), provider, classifiers, () => 0.5);
+  expect(provider.mock.calls[0]?.[0].instructions).not.toContain("/api/challenge/leaderboard");
+});
+
 it("keyword guard runs before any generation", async () => {
   const provider = vi.fn();
   await expect(runChallengeModel({ ...request(4), message: "SECRET" }, provider)).resolves.toContain("keyword filter");
@@ -99,7 +109,7 @@ it("fails closed on unknown configuration", () => {
 
 it("public metadata contains no provider or private execution configuration", () => {
   for (const challenge of challengeCatalog) {
-    expect(Object.keys(challenge).sort()).toEqual(["id", "title", "subtitle", "description", "difficulty", "points", "defenses", "hint", "turnLimit", "interaction", "completionMethod"].sort());
+    expect(Object.keys(challenge).filter((key) => key !== "hidden").sort()).toEqual(["id", "title", "subtitle", "description", "difficulty", "points", "defenses", "hint", "turnLimit", "interaction", "completionMethod"].sort());
   }
   expect(JSON.stringify(challengeCatalog)).not.toMatch(/cdx\{|LLM_API_KEY|promptPolicy|inputGuard|outputGuard/);
 });

@@ -131,6 +131,7 @@ export const challengeCatalog: Challenge[] = [
     turnLimit: null,
     interaction: "sandbox",
     completionMethod: "sandbox",
+    hidden: true,
   },
 ];
 

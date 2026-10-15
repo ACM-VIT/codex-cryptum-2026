@@ -44,6 +44,7 @@ export const challengeSchema = z.object({
   turnLimit: z.number().int().positive().nullable(),
   interaction: z.enum(["chat", "sandbox"]).default("chat"),
   completionMethod: z.enum(["flag", "sandbox"]).default("flag"),
+  hidden: z.boolean().optional(),
 });
 export type Challenge = z.infer<typeof challengeSchema>;
 export const leaderboardSchema = z.object({
