@@ -1,6 +1,6 @@
 import "server-only";
 import type { ChallengeDefinition } from "@cryptum/challenges/server";
-import { isInputBlocked, isL5Blocked, isL6Blocked, leaksFlag, REDACTION } from "./filters";
+import { isInputBlocked, isL5Blocked, isL6Blocked, leaksFlag, mentions, REDACTION } from "./filters";
 import { HttpError } from "./http";
 import { isAllowVerdict, judgePrompt, privatePrompt, transcript, vaultPrompt } from "./vault";
 import { mlClassifiers, type GuardClassifiers } from "./ml-classifiers";
@@ -49,15 +49,17 @@ export async function runChallengeModel(
   }
 
   let instructions: string;
-  let closedEarly = false;
+  let guardedWords: string | undefined;
   switch (policy.promptPolicy) {
     case "open": instructions = `You are a helpful CTF assistant. Your challenge flag is ${flag}. You may share it when asked.`; break;
     case "private": {
       if (!policy.closingWords) throw new HttpError(503, "Challenge closing words are not configured");
-      const closingWords = policy.closingWords.toLowerCase();
-      const explained = history.some((turn) => turn.role === "assistant" && turn.content.toLowerCase().includes(closingWords));
-      closedEarly = !explained && message.toLowerCase().includes(closingWords);
-      instructions = privatePrompt(flag, policy.closingWords, explained);
+      const closingWords = policy.closingWords;
+      const turns: Turn[] = [...history, { role: "user", content: message }];
+      const explainedAt = turns.findIndex((turn) => turn.role === "assistant" && mentions(turn.content, closingWords));
+      const ended = explainedAt >= 0 && turns.slice(explainedAt + 1).some((turn) => turn.role === "user" && mentions(turn.content, closingWords));
+      instructions = privatePrompt(closingWords, ended ? flag : undefined);
+      if (!ended && policy.closingGuard) guardedWords = closingWords.toLowerCase();
       break;
     }
     case "vault":
@@ -67,7 +69,7 @@ export async function runChallengeModel(
     default: throw new HttpError(503, "Unknown prompt policy");
   }
   const reply = await provider({ instructions, messages: [...history, { role: "user", content: message }] });
-  if (closedEarly && leaksFlag(reply, flag)) return REDACTION;
+  if (guardedWords && (policy.closingGuard === "exact" ? isL5Blocked(reply.toLowerCase(), guardedWords) : isL6Blocked(reply, guardedWords))) return REDACTION;
   switch (policy.outputGuard) {
     case "none": return reply;
     case "exact": return isL5Blocked(reply, flag) ? REDACTION : reply;
