@@ -57,7 +57,7 @@ export async function runChallengeModel(
       break;
     case "vault":
       if (!policy.pieceSize) throw new HttpError(503, "Challenge piece size is not configured");
-      instructions = vaultPrompt(`VAULT-${definition.id}`, flag, policy.pieceSize);
+      instructions = vaultPrompt(`VAULT-${definition.id}`, flag, policy.pieceSize, policy.pieceHint);
       break;
     default: throw new HttpError(503, "Unknown prompt policy");
   }
