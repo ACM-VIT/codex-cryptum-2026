@@ -51,7 +51,7 @@ it("uses the configured Luna chat model with bounded SDK requests and no telemet
     model: { modelId: "gpt-6-luna" },
     instructions: expect.stringContaining("You may share it when asked."),
     messages: [...history, { role: "user", content: "hello" }],
-    maxOutputTokens: 2048, maxRetries: 0, timeout: { totalMs: 45_000 },
+    maxOutputTokens: 2048, maxRetries: 0, timeout: { totalMs: 120_000 },
     providerOptions: { openai: { reasoningEffort: "none" } }, temperature: 0.3,
     telemetry: { isEnabled: false },
   });

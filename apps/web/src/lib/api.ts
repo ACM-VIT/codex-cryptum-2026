@@ -35,7 +35,7 @@ async function request<T>(
       cache: "no-store",
       headers: data ? { "Content-Type": "application/json" } : undefined,
       body: data ? JSON.stringify(data) : undefined,
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(150_000),
     });
   } catch {
     throw new ApiError("Connection lost. Check your connection and try again.");
