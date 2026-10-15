@@ -38,29 +38,38 @@ const providerFetch: typeof fetch = async (input, init) => {
   return new Response(Buffer.concat(chunks), { status: response.status, headers: response.headers });
 };
 
-export interface ModelRequest { instructions: string; messages: Turn[]; maxOutputTokens?: number }
+export interface ModelRequest { instructions: string; messages: Turn[]; maxOutputTokens?: number; temperature?: number }
 export type ModelProvider = (request: ModelRequest) => Promise<string>;
 
 export function validateModelConfig(): void { modelConfig(); }
 
-export async function complete({ instructions, messages, maxOutputTokens = 2048 }: ModelRequest): Promise<string> {
+const NO_THINK = " /no_think";
+
+export function withoutThinking(text: string): string {
+  if (text.includes("</think>")) return text.slice(text.lastIndexOf("</think>") + "</think>".length).trim();
+  return text.includes("<think>") ? "" : text;
+}
+
+export async function complete({ instructions, messages, maxOutputTokens = 2048, temperature = 0.3 }: ModelRequest): Promise<string> {
   const { model, ...config } = modelConfig();
+  const qwen = model.startsWith("qwen3");
   try {
     const result = await generateText({
       model: createOpenAI({ ...config, fetch: providerFetch }).chat(model),
-      instructions,
-      messages,
+      instructions: qwen ? instructions + NO_THINK : instructions,
+      messages: qwen ? messages.map((turn) => turn.role === "user" ? { ...turn, content: turn.content + NO_THINK } : turn) : messages,
       maxOutputTokens,
       maxRetries: 0,
       timeout: { totalMs: 45_000 },
       // Luna supports no-reasoning mode: classifiers need only an eight-token verdict.
-      providerOptions: { openai: { reasoningEffort: "none" } },
-      temperature: 0.3,
+      ...(qwen ? {} : { providerOptions: { openai: { reasoningEffort: "none" } } }),
+      temperature,
       telemetry: { isEnabled: false },
     });
     if (result.finishReason === "content-filter") return REDACTION;
-    if (result.finishReason === "error" || !result.text || result.text.length > 32768) throw new Error("Invalid model output");
-    return result.text;
+    const text = withoutThinking(result.text ?? "");
+    if (result.finishReason === "error" || !text || text.length > 32768) throw new Error("Invalid model output");
+    return text;
   } catch {
     // SDK errors can contain request bodies, credentials and confidential flags.
     throw new HttpError(503, "Model unavailable");
