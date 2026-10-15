@@ -40,14 +40,16 @@ control; OpenAI prompts do not. See `security/DEPLOYMENT.md` for the private bri
 | Level | Prompt | Input guard | Output guard |
 | --- | --- | --- | --- |
 | 1 | Open | None | None |
-| 2 | Private | None | None |
-| 3 | Hardened | None | None |
-| 4 | Hardened | Keyword | None |
-| 5 | Hardened | None | Exact flag match |
-| 6 | Hardened | None | Encoding-aware, limited inspection window |
-| 7 | Hardened | Classifier | None |
-| 8 | Hardened | Classifier | Classifier |
-| 9 | Hardened | Conversation classifier | Classifier |
+| 2 | Private, closing words | None | None |
+| 3 | Vault, 12-character pieces | None | None |
+| 4 | Private, closing words | Keyword | None |
+| 5 | Private, closing words | None | Exact flag match |
+| 6 | Private, closing words | None | Encoding-aware, limited inspection window |
+| 7 | Private, closing words | Classifier | None |
+| 8 | Private, closing words | Classifier | Classifier |
+| 9 | Vault, 6-character pieces | Blocklist | Leak filter and conversation judge |
+
+Private levels keep the flag until the player types that level's closing words, which the model only reveals when asked for its rules. Vault levels release one numbered piece per message. Neither can be won with a single message.
 | 10 | No model | Sandbox exploit | Server verification |
 
 These weaknesses are intentional CTF mechanics. Do not use them to protect real secrets.

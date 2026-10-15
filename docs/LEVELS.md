@@ -68,4 +68,4 @@ The results below are from `qwen3:8b`.
 - **Level 3** can be beaten with one known trick, which is fine for an early level.
 - **Level 9** has not been beaten yet. Someone must find a way to win it before the event, or loosen it (e.g. more turns).
 - **Level 9 uses 2 model calls per message,** so it costs double.
-- **Next.js:** the app runs both levels in TypeScript (`apps/web/src/server/vault.ts`, `filters.ts` and `llm.ts`). The Python here is the reference and the attack harness. The app gives level 9 six turns, not five.
+- **Next.js:** the app runs both levels in TypeScript (`apps/web/src/server/vault.ts`, `filters.ts` and `llm.ts`). The Python here is the reference and the attack harness. The app gives level 9 six turns, not five, and runs level 3 on the vault prompt with 12-character pieces instead of the prompt here.
