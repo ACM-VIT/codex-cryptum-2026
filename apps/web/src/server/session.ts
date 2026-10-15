@@ -22,7 +22,13 @@ export function sessionCookie(token: string, clear = false): string {
 export async function currentTeam(request: Request, nullable = false): Promise<string | null> {
   const token = cookieToken(request);
   if (!token && nullable) return null;
-  const user = await requireGoogleUser(request.headers);
+  let user: Awaited<ReturnType<typeof requireGoogleUser>>;
+  try {
+    user = await requireGoogleUser(request.headers);
+  } catch (error) {
+    if (nullable && (error as { status?: unknown }).status === 401) return null;
+    throw error;
+  }
   if (!token) throw new HttpError(401, "Team session required");
   const [session] = await getDb().select({ teamId: sessions.teamId }).from(sessions).where(and(
     eq(sessions.tokenHash, digest(token)), eq(sessions.userId, user.id), gt(sessions.expiresAt, new Date()),

@@ -102,6 +102,9 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
     expect((await (await session(request("session", "GET"))).json()).id).toBe(teamId);
     expect((await session(request("session", "GET", {}, "other-google-user"))).status).toBe(200);
     expect(await (await session(request("session", "GET", {}, "other-google-user"))).json()).toBeNull();
+    const signedOut = await session(request("session", "GET", {}, null));
+    expect(signedOut.status).toBe(200);
+    expect(await signedOut.json()).toBeNull();
     expect((await submit(request("challenges/5/submissions", "POST", { flag: "guess" }, "other-google-user"), id("5"))).status).toBe(401);
     expect((await submit(request("challenges/5/submissions", "POST", { flag: "guess" }, null), id("5"))).status).toBe(401);
   });
