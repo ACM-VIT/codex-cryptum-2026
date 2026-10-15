@@ -1117,7 +1117,7 @@ select {
   margin-left: auto;
   white-space: nowrap;
 }
-.ai-prompt-actions button {
+.ai-prompt-box > button {
   display: grid;
   place-items: center;
   flex: 0 0 36px;
@@ -1637,11 +1637,37 @@ h3,
 .conversation-empty { padding: 8px 0; font-size: 14px; }
 .challenge-conversation .ai-prompt-box { flex-shrink: 0; padding: 8px; border-radius: 16px; }
 .challenge-conversation .ai-prompt-box textarea {
-  min-height: 48px;
+  min-height: 36px;
   max-height: 96px;
   padding: 6px 8px;
 }
 .challenge-conversation .ai-prompt-actions { padding-top: 4px; }
+.challenge-page.challenge-page-chat {
+  height: auto;
+  min-height: 0;
+  grid-template-rows: auto auto auto;
+}
+.challenge-page-chat .conversation-messages {
+  flex: 0 1 auto;
+  max-height: min(280px, 36dvh);
+  padding: 6px 0;
+}
+.challenge-conversation .message { padding: 10px 0; }
+.challenge-conversation .message-meta { margin-bottom: 4px; }
+.challenge-conversation .message-meta b { font-size: 12px; }
+.challenge-conversation .message-content { font-size: 14px; line-height: 1.5; }
+.challenge-conversation .copy-button { padding-top: 4px; }
+.challenge-conversation .ai-prompt-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: end;
+  column-gap: 8px;
+}
+.challenge-conversation .ai-prompt-actions {
+  grid-column: 1 / -1;
+  padding: 4px 8px 0;
+  font-size: 11px;
+}
 .challenge-page > .sandbox-panel {
   min-height: 0;
   overflow-y: auto;

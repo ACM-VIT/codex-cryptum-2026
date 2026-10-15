@@ -1,23 +1,33 @@
 import "server-only";
 import { getDb, sandboxTeams, exploitEvents, solves, challenges } from "@cryptum/db";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { HttpError } from "./http";
 import { lock } from "./challenges";
 import { equalSecret } from "./security";
 import { sandboxChallengeId } from "./challenge-config";
 
 const SCOPE = "challenge-sandbox";
-const SEEDS = [
-  { id: "team-aurora", name: "Aurora Labs", score: 4200 },
-  { id: "team-borealis", name: "Borealis Security", score: 3300 },
-  { id: "team-cipher", name: "Cipher Collective", score: 2700 },
-  { id: "team-ember", name: "Ember Research", score: 1900 },
-];
 const publicEntry = (row: typeof sandboxTeams.$inferSelect) => ({ team_id: row.id, display_name: row.name, score: row.score });
 
 export async function sandboxLeaderboard() {
-  const rows = await getDb().select().from(sandboxTeams).orderBy(desc(sandboxTeams.score), asc(sandboxTeams.id));
-  return { entries: rows.map((row, index) => ({ ...publicEntry(row), rank: index + 1 })), scope: SCOPE, objective: "Reach first place in the sandbox, then verify completion." };
+  return getDb().transaction(async (tx) => {
+    await lock(tx, "sandbox:leaderboard");
+    await syncSandboxTeams(tx);
+    const rows = await tx.select().from(sandboxTeams).orderBy(desc(sandboxTeams.score), asc(sandboxTeams.id));
+    return { entries: rows.map((row, index) => ({ ...publicEntry(row), rank: index + 1 })), scope: SCOPE, objective: "Move another team into first place in this isolated copy, then verify completion." };
+  });
+}
+
+// New registrations enter the sandbox with their real score. Existing edits
+// remain isolated until an organizer resets the challenge.
+async function syncSandboxTeams(tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0]) {
+  await tx.execute(sql`DELETE FROM exploit_events WHERE target_team_id IN
+    (SELECT id FROM sandbox_teams WHERE id NOT IN (SELECT id::text FROM teams))`);
+  await tx.execute(sql`DELETE FROM sandbox_teams WHERE id NOT IN (SELECT id::text FROM teams)`);
+  await tx.execute(sql`INSERT INTO sandbox_teams (id, name, score)
+    SELECT teams.id::text, teams.name, coalesce(sum(solves.points), 0)::integer
+    FROM teams LEFT JOIN solves ON solves.team_id = teams.id
+    GROUP BY teams.id, teams.name ON CONFLICT (id) DO NOTHING`);
 }
 
 export async function patchSandboxTeam(actorTeamId: string, target: string, patch: { score?: number; display_name?: string }) {
@@ -62,7 +72,7 @@ export async function resetSandbox() {
     await lock(tx, "sandbox:leaderboard");
     await tx.delete(exploitEvents);
     await tx.delete(sandboxTeams);
-    await tx.insert(sandboxTeams).values(SEEDS);
+    await syncSandboxTeams(tx);
     // Resetting a playground must never remove or rewrite official solve awards.
   });
   return { reset: true, scope: SCOPE };

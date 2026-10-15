@@ -1,3 +1,4 @@
+import { sandboxLeaderboard } from "./sandbox";
 import { randomUUID, scryptSync } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -69,6 +70,8 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
       await getDb().delete(exploitEvents).where(eq(exploitEvents.actorTeamId, otherId));
       for (const row of sandboxBefore) await getDb().update(sandboxTeams).set({ name: row.name, score: row.score }).where(eq(sandboxTeams.id, row.id));
       for (const actor of [teamId, otherId]) {
+        await getDb().delete(exploitEvents).where(eq(exploitEvents.targetTeamId, actor));
+        await getDb().delete(sandboxTeams).where(eq(sandboxTeams.id, actor));
         await getDb().delete(messages).where(eq(messages.teamId, actor));
         await getDb().delete(submissions).where(eq(submissions.teamId, actor));
         await getDb().delete(solves).where(eq(solves.teamId, actor));
@@ -217,10 +220,10 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
     expect(await getDb().select().from(chatOperations).where(eq(chatOperations.teamId, teamId))).toHaveLength(0);
     expect((await submit(request("challenges/10/submissions", "POST", { flag: "not-a-sandbox-solution" }), id("10"))).status).toBe(409);
     expect((await (await complete(request("challenge/leaderboard/complete"))).json()).completed).toBe(false);
-    const ordered = [...sandboxBefore].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-    const target = ordered.at(-1);
-    if (!target) throw new Error("Expected seeded sandbox teams");
-    expect((await patch(request(`challenge/leaderboard/teams/${target.id}`, "PATCH", { score: 999999 }), id(target.id))).status).toBe(200);
+    const board = await sandboxLeaderboard();
+    const target = board.entries.find(entry => entry.team_id !== teamId && entry.rank !== 1);
+    if (!target) throw new Error("Expected another registered team below first place");
+    expect((await patch(request(`challenge/leaderboard/teams/${target.team_id}`, "PATCH", { score: 999999 }), id(target.team_id))).status).toBe(200);
     expect((await officialLeaderboard()).teams).toEqual(before.teams);
     expect((await (await complete(request("challenge/leaderboard/complete"))).json()).points_awarded).toBeGreaterThan(0);
     expect((await (await complete(request("challenge/leaderboard/complete"))).json()).points_awarded).toBe(0);

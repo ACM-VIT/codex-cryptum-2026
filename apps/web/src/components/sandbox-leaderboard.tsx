@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { RefreshCw, Terminal } from "lucide-react";
 import { Input } from "./ui/input";
 import { ErrorNotice } from "./ui";
 import { sandboxApi, type SandboxBoard } from "../lib/sandbox-api";
+import { startLiveRefresh } from "../lib/live-refresh";
 import { api } from "../lib/api";
 import { useApp } from "../lib/context";
 
@@ -20,7 +21,16 @@ export function SandboxLeaderboard({ showOrganizerTools = true }: { showOrganize
   // Credentials live only in component memory, never in local storage or public env.
   const [participantToken, setParticipantToken] = useState("");
   const [organizerToken, setOrganizerToken] = useState("");
-  const load = useCallback(async () => { setBoard(await sandboxApi.leaderboard()); }, []);
+  const requestId = useRef(0);
+  const load = useCallback(async () => {
+    const generation = ++requestId.current;
+    try {
+      const result = await sandboxApi.leaderboard();
+      if (generation === requestId.current) { setBoard(result); setError(""); }
+    } catch (cause) {
+      if (generation === requestId.current) setError((cause as Error).message);
+    }
+  }, []);
   const run = async (action: () => Promise<void>) => {
     if (busy) return;
     setBusy(true); setError(""); setStatus("");
@@ -28,11 +38,10 @@ export function SandboxLeaderboard({ showOrganizerTools = true }: { showOrganize
     finally { setBusy(false); }
   };
   useEffect(() => {
-    let disposed = false;
-    sandboxApi.leaderboard().then(result => { if (!disposed) setBoard(result); })
-      .catch(e => { if (!disposed) setError((e as Error).message); });
-    return () => { disposed = true; };
-  }, []);
+    const stop = startLiveRefresh(load);
+    const invalidate = () => { requestId.current++; };
+    return () => { stop(); invalidate(); };
+  }, [load]);
   const edit = (event: FormEvent) => {
     event.preventDefault();
     void run(async () => {
@@ -54,6 +63,8 @@ export function SandboxLeaderboard({ showOrganizerTools = true }: { showOrganize
         <thead><tr><th scope="col">RANK</th><th scope="col">SANDBOX TEAM</th><th scope="col">SCORE</th><th scope="col">ACTION</th></tr></thead>
         <tbody>{board?.entries.map(entry => <tr key={entry.team_id}><td>{entry.rank}</td><td><b>{entry.display_name}</b><br /><small>{entry.team_id}</small></td><td>{entry.score.toLocaleString()}</td><td><button className="text-button" disabled={busy} onClick={() => { setTeamId(entry.team_id); setName(entry.display_name); setScore(String(entry.score)); }}>Edit sandbox team</button></td></tr>)}</tbody>
       </table></div>
+      {board && board.entries.length < 2 && <p className="notice">This challenge needs at least two registered teams. Teams appear here automatically when they join.</p>}
+      <p className="field-help">Updates every 3 seconds. Sandbox scores start from real standings; your practice edits stay here.</p>
       {!board && !error && <output className="block">Loading sandbox…</output>}
       <form className="sandbox-form" onSubmit={edit}>
         <label htmlFor="sandbox-token">Participant sandbox token (optional when the server supplies session authorization)</label>

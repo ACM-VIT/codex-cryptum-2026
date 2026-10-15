@@ -13,7 +13,7 @@ pnpm db:seed
 pnpm dev
 ```
 
-Open **http://localhost:3000**. Sign in with Google, then join **Demo Team** using `DEV_TEAM_ACCESS_CODE` from your local `.env`.
+Open **http://localhost:3000**. Sign in with Google, then create your team or join using a teammate’s access code. No demo teams are seeded.
 
 Use Node.js 26 and pnpm 12.11.2. The app uses Next.js 16.4.1, React 19.3.1, and TypeScript 7. Dependencies are recorded in `pnpm-lock.yaml`.
 
@@ -31,7 +31,6 @@ Keep these in the root `.env`. Never commit it.
 | `LLM_BASE_URL` | OpenAI-compatible base URL, e.g. `https://api.openai.com/v1` |
 | `LLM_MODEL` | `gpt-6-luna` |
 | `FLAG_SECRET` | Independent random secret, at least 32 bytes |
-| `DEV_TEAM_ACCESS_CODE` | Development team's access code |
 | `ORGANIZER_TOKEN` | Independent secret for resetting the sandbox |
 
 Register this redirect URI in your Google OAuth client:
@@ -69,7 +68,7 @@ Database tests temporarily edit sandbox state and restore it. CI runs the first 
 
 - `pnpm db:generate`: generate SQL after a schema change; review it before applying.
 - `pnpm db:migrate`: apply committed migrations.
-- `pnpm db:seed`: synchronize development challenge metadata and seed the demo team. Existing points, availability, and progress are preserved.
+- `pnpm db:seed`: synchronize challenge metadata without creating teams. Existing points, availability, and progress are preserved.
 
 The provisioned Neon database is project **`dry-band-16656722`**, branch **`development`**, database **`cryptum`**, region **`aws-ap-southeast-1`**, PostgreSQL **17**. Its connection string is only in the ignored local `.env`. Migrations and seed have been applied.
 
@@ -107,3 +106,5 @@ Next.js provider settings do not automatically change the native Python inferenc
 adapter or HMAC derivation. The Python pipeline now supports both Ollama and the
 official OpenAI SDK; see [provider setup](security/README.md#selecting-the-python-llm-provider). The Python work does not implement authentication, scoring, or any
 other challenge levels.
+
+Leaderboards refresh every three seconds and immediately on reconnect or tab focus. Official scores come from recorded solves. Level 10 uses isolated copies of registered teams, initialized from their real scores; practice edits persist until reset. At least two registered teams are required.
