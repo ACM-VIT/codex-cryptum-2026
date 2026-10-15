@@ -36,7 +36,7 @@ it("level 9 generates, then judges the whole transcript at temperature 0", async
   await expect(runChallengeModel(request(9), provider)).resolves.toBe("safe response");
   expect(calls[0]?.instructions).toContain("You are VAULT-9");
   expect(calls[0]?.messages).toEqual([...request(9).history, { role: "user", content: "hello" }]);
-  expect(calls[1]).toMatchObject({ maxOutputTokens: 8, temperature: 0, instructions: expect.stringContaining("The secret is: cdx{private}") });
+  expect(calls[1]).toMatchObject({ maxOutputTokens: 32, temperature: 0, instructions: expect.stringContaining("The secret is: cdx{private}") });
   expect(calls[1]?.messages).toEqual([{ role: "user",
     content: "<transcript>\nUSER: earlier context\nUSER: hello\n</transcript>\n<proposed>\nVAULT: safe response\n</proposed>\nVerdict:" }]);
 });
