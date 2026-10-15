@@ -111,7 +111,7 @@ export function Join() {
           ) : (
             <>
               <label htmlFor="team-code">Team code</label>
-              <Input id="team-code" size="lg" value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. CC-1234ABCD" maxLength={128} autoComplete="off" required />
+              <Input id="team-code" size="lg" value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. 482913" inputMode="numeric" maxLength={128} autoComplete="off" required />
               <span className="field-help">Ask a teammate for your team's code.</span>
             </>
           )}
