@@ -278,3 +278,67 @@ on a supported host is now available to the Next.js integration. Remote transpor
 and host supervision remain deployment responsibilities. See
 [TEST_REPORT.md](TEST_REPORT.md) and [DEPLOYMENT.md](DEPLOYMENT.md) for evidence and
 provider configuration details.
+
+## macOS Python 3.11 CI investigation and merge follow-up
+
+The current PR base is `feat/dev`, so this follow-up merges its fetched `9f259c0`
+instead of the previously requested `main`. The fetched `origin/main` (`15fe01a`)
+is an ancestor of `feat/dev`. Four conflicts were resolved locally:
+
+| File | Resolution |
+| --- | --- |
+| `.gitignore` | Union/deduplicate both branches' rules; retain secret/model/cache exclusions and teammate editor/tooling ignores |
+| `apps/web/src/server/security.ts` | Keep `feat/dev` team access-code encryption/hash helpers and phrase-based team/challenge HMAC flags; no backend contract overwrite |
+| `apps/web/src/server/security.test.ts` | Retain teammate code/encryption/phrase tests plus guardrail branch's all-level format/isolation checks, adapted to the backend's phrase argument |
+| `apps/web/src/server/llm.test.ts` | Retain independent Level 7/8 ML tests, Level 9 judge tests, provider/thinking/streaming tests; incorporate upstream `cdx` fixtures without restoring a generative judge at Levels 7/8 |
+
+The actual failing log was retrieved with:
+
+```text
+gh run view 38692751500 --job 116282227764 --log-failed
+```
+
+[The failing ARM64/macOS job](https://github.com/ayaankhatri/Codex-Cryptum-2026/actions/runs/38692751500/job/116282227764)
+ran Python **3.11.9**. Dependencies installed successfully, and the separate CPU
+Torch/Transformers import check passed with **torch 2.9.1**. The unit suite then
+reported **316 passed, 1 failed, 15 deselected**. The failure was
+`test_startup_timeout_prevents_admission_and_can_retry`, line 279: expected
+`SecurityError("startup_failed")`, but no exception was raised. No model weights
+are downloaded or loaded by that CI step. This was not an ARM64 wheel/import failure.
+
+The runtime used `asyncio.wait_for(asyncio.shield(wrapped), timeout)` inside an
+outer startup `asyncio.timeout`. A controlled callback-order probe on local Python
+**3.11.16** reproduced cancellation being swallowed when completion and caller
+cancellation coincide; the same probe on **3.12.14** propagated cancellation.
+Three focused regressions failed before the fix on Python 3.11:
+
+1. A ready classifier result must not swallow caller cancellation.
+2. A provider suppressing cancellation cannot make expired startup ready.
+3. Synchronous initialization occupying the loop past its deadline cannot admit requests.
+
+The local fix awaits the shielded future directly inside `asyncio.timeout`, preserving
+native worker-slot ownership and cancellation propagation. `SecurityRuntime.start`
+uses one monotonic absolute deadline, passes the remaining budget to each warm-up,
+and checks the deadline after initialization/preflight and before readiness. Deadline
+or cancellation failures remain sanitized and fail closed; an explicit retry can
+recover. No timeout values, challenge thresholds, pinned revisions, weights or
+provider settings were weakened, and no job/test was skipped or removed.
+
+Post-fix local results:
+
+| Check | Result |
+| --- | --- |
+| Python 3.11.16 unit/mock suite | **320 passed**, 15 integration cases deselected |
+| Python 3.12.14 complete cached-model/local-Ollama selection | **332 passed**, 3 separately gated OpenAI cases skipped |
+| Real official-SDK OpenAI selection, both levels with actual classifiers | **3 passed** |
+| Four affected startup/cancellation cases, 10 repetitions per Python version | **40/40 passed on 3.11; 40/40 on 3.12** |
+| JavaScript ordinary suites | **128 passed**, 9 database cases separately gated |
+| Merged isolated PostgreSQL integration | **9 passed** |
+| JS lint/typecheck/build, Ruff/format, mock CLI, Python wheel | PASS |
+
+Real ML and Ollama tests used Python 3.12 on Linux with cached CPU weights; the local
+3.11 environment ran core/mock tests without installing another large Torch wheel.
+No native macOS runner was available locally. **The actual macOS/Python 3.11 job
+has not yet passed with these changes. Its status remains unverified pending an
+authorized push and the resulting CI run.** The matrix is unchanged and the failing
+job is retained. No push or remote CI rerun of old code was used as evidence of a fix.

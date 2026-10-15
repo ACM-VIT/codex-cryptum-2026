@@ -1,0 +1,1 @@
+ALTER TABLE "teams" ADD COLUMN "access_code_encrypted" text;

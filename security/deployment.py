@@ -95,7 +95,7 @@ class SecurityRuntime:
         return self._runners[key]
 
     async def start(self, *, startup_timeout: float = 300.0) -> None:
-        """Eager warm-up + Ollama model preflight; retry after failure is explicit.
+        """Eager warm-up + selected-provider preflight; retries are explicit.
 
         Timeout applies to the entire warm-up/preflight. A timed-out native worker
         keeps its slot until it finishes. It cannot be killed safely in a thread.
@@ -113,12 +113,22 @@ class SecurityRuntime:
                 return
             self._state = "loading"
             self._ollama_checked = False
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + startup_timeout
+
+            def check_deadline():
+                # A native import may block the event loop, or a provider may
+                # suppress cancellation. Neither can make overdue startup ready.
+                if loop.time() >= deadline:
+                    raise TimeoutError
+
             try:
-                async with asyncio.timeout(startup_timeout):
+                async with asyncio.timeout_at(deadline):
                     # Validate required trusted settings before loading any model.
                     for level in (7, 8):
                         self._authority.issue("startup-health", level)
                     configure_cpu_threads()
+                    check_deadline()
                     inputs = {
                         i: MLInputClassifier(
                             self._policies.config(i).security.input_classifier,
@@ -135,15 +145,18 @@ class SecurityRuntime:
                     # No production secrets are used as warm-up model text.
                     for runner in self._runners.values():
                         hypotheses = _WARM_HYPOTHESES if runner is output._runner else ()
+                        check_deadline()
                         await runner.score(
                             _WARM_TEXT,
                             hypotheses=hypotheses,
                             max_tokens=runner.config.max_tokens,
-                            timeout=startup_timeout,
+                            timeout=deadline - loop.time(),
                         )
+                        check_deadline()
                     for model in {self._policies.config(i).model for i in (7, 8)}:
+                        check_deadline()
                         await self._inference.check_available(model)
-                    self._ollama_checked = True
+                        check_deadline()
                     self._pipeline = SecurityPipeline(
                         self._authority,
                         self._policies,
@@ -151,6 +164,8 @@ class SecurityRuntime:
                         output_classifiers={8: output},
                         event_sink=self._event_sink,
                     )
+                check_deadline()
+                self._ollama_checked = True
                 self._state = "ready"
             except asyncio.CancelledError:
                 self._state = "failed"

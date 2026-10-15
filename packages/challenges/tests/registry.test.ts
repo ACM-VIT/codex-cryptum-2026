@@ -11,6 +11,16 @@ vi.mock("server-only", () => ({}));
 const expectedIds = Array.from({ length: 10 }, (_, index) => index + 1);
 
 describe("challenge registry", () => {
+  it("gives every flag challenge a unique, well-formed phrase that stays out of public metadata", () => {
+    const phrases = challengeDefinitions.filter(isLlmDefinition).map((definition) => definition.flagPhrase);
+    expect(phrases).toHaveLength(9);
+    expect(new Set(phrases).size).toBe(phrases.length);
+    for (const phrase of phrases) {
+      expect(phrase).toMatch(/^[a-z0-9]+(?:_[a-z0-9]+)*$/);
+      expect(JSON.stringify(challengeCatalog)).not.toContain(phrase);
+    }
+  });
+
   it("has unique, complete public metadata and server definitions", () => {
     expect(challengeCatalog.map(({ id }) => id).sort((a, b) => a - b)).toEqual(expectedIds);
     expect(challengeDefinitions.map(({ id }) => id).sort((a, b) => a - b)).toEqual(expectedIds);

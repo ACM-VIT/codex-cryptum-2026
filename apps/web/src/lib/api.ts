@@ -1,9 +1,11 @@
 import { z } from "zod";
 import {
   challengeSchema,
+  createdTeamSchema,
   leaderboardSchema,
   sessionSchema,
   submissionSchema,
+  teamDetailsSchema,
   type CtfApi,
 } from "./contracts";
 
@@ -23,6 +25,7 @@ async function request<T>(
   schema: z.ZodType<T>,
   method = "GET",
   data?: unknown,
+  serverMessages: number[] = [],
 ): Promise<T> {
   let response: Response;
   try {
@@ -37,6 +40,10 @@ async function request<T>(
     throw new ApiError("Connection lost. Check your connection and try again.");
   }
   if (!response.ok) {
+    if (serverMessages.includes(response.status)) {
+      const detail = await response.json().then((value) => z.object({ error: z.string() }).parse(value).error).catch(() => null);
+      if (detail) throw new ApiError(detail, response.status);
+    }
     const messages: Record<number, string> = {
       401: "Your session has expired. Rejoin your team to continue.",
       403: "Access denied. Check your team access code.",
@@ -60,10 +67,17 @@ async function request<T>(
 
 const live: CtfApi = {
   session: () => request("/session", sessionSchema.nullable()),
-  join: (teamName, accessCode) =>
-    request("/session", sessionSchema, "POST", { teamName, accessCode }),
-  leave: async () => {
-    await request("/session", z.object({ ok: z.literal(true) }), "DELETE");
+  join: (accessCode) =>
+    request("/session", sessionSchema, "POST", { accessCode }),
+  createTeam: (teamName) =>
+    request("/teams", createdTeamSchema, "POST", { teamName }, [409]),
+  team: () => request("/team", teamDetailsSchema),
+  renameTeam: (teamName) =>
+    request("/team", sessionSchema, "PATCH", { teamName }, [403, 409]),
+  leave: (confirmDelete = false) =>
+    request("/session", z.object({ ok: z.literal(true), deleted: z.boolean() }), "DELETE", { confirmDelete }, [409]),
+  logout: async () => {
+    await request("/session/logout", z.object({ ok: z.literal(true) }), "POST", {});
   },
   challenges: () => request("/challenges", z.array(challengeSchema)),
   chat: (id, content) =>

@@ -479,3 +479,61 @@ async def test_cancelled_shutdown_waiter_does_not_cancel_cleanup(managed):
     finally:
         control.release.set()
         await runtime.aclose()
+
+
+async def test_startup_cannot_admit_after_preflight_suppresses_deadline(managed, monkeypatch):
+    runtime, inference, _, _, _ = managed
+    await runtime.start()
+    runtime._state = "failed"  # Simulate an explicit restart of the warmed worker.
+    cancelled = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    real_clock = loop.time
+    clock_offset = 0.0
+
+    async def suppress_cancellation(model):
+        nonlocal clock_offset
+        # Expire only after preflight starts, independent of runner/OS speed.
+        clock_offset = 61.0
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+
+    original = inference.check_available
+    inference.check_available = suppress_cancellation
+    try:
+        with monkeypatch.context() as clock:
+            clock.setattr(loop, "time", lambda: real_clock() + clock_offset)
+            with pytest.raises(SecurityError, match="^startup_failed$"):
+                await runtime.start(startup_timeout=60.0)
+        assert cancelled.is_set()
+        assert not runtime.health().ready and not runtime.health().provider_preflight_passed
+        assert (await runtime.handle(7, "team_alpha", "hello")).code == "security_unavailable"
+        inference.check_available = original
+        await runtime.start()
+        assert runtime.health().ready
+    finally:
+        await runtime.aclose()
+
+
+async def test_startup_deadline_includes_synchronous_initialization(managed, monkeypatch):
+    import time
+
+    runtime, inference, _, _, _ = managed
+
+    def delayed_initialization():
+        # Native initialization can occupy the loop until its deadline is overdue.
+        time.sleep(0.03)
+
+    async def immediately_ready(self, *args, **kwargs):
+        return 0.1
+
+    monkeypatch.setattr(deployment, "configure_cpu_threads", delayed_initialization)
+    monkeypatch.setattr(ModelRunner, "score", immediately_ready)
+    try:
+        with pytest.raises(SecurityError, match="^startup_failed$"):
+            await runtime.start(startup_timeout=0.01)
+        assert runtime.health().state == "failed" and not inference.preflights
+        assert not runtime.health().provider_preflight_passed
+    finally:
+        await runtime.aclose()

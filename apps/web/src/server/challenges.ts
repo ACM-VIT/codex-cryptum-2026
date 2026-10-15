@@ -7,9 +7,16 @@ import { HttpError } from "./http";
 import { equalSecret, flagFor } from "./security";
 import { runChallengeModel } from "./llm";
 import { challengeConfig } from "./challenge-config";
+import { isLlmDefinition } from "@cryptum/challenges/server";
 import { snapshot } from "./session";
 
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+
+export function flagForChallenge(teamId: string, id: number): string {
+  const { definition } = challengeConfig(id);
+  if (!isLlmDefinition(definition)) throw new HttpError(409, "This challenge has no flag");
+  return flagFor(teamId, id, definition.flagPhrase);
+}
 
 export async function lock(tx: Tx, key: string): Promise<void> {
   const result = await tx.execute(sql`select pg_try_advisory_xact_lock(hashtextextended(${key}, 0)) as locked`);
@@ -65,7 +72,7 @@ export async function sendMessage(teamId: string, id: number, content: string) {
   try {
     // The attempt is already committed. Provider errors and resets cannot erase
     // the rate budget, and no transaction is open during these network calls.
-    const flag = flagFor(teamId, id);
+    const flag = flagForChallenge(teamId, id);
     const reply = await runChallengeModel({ definition, flag, history: reservation.history, message: content });
     const completed = await getDb().transaction(async (tx) => {
       await lock(tx, `chat:${teamId}`);
@@ -116,7 +123,7 @@ export async function submitFlag(teamId: string, id: number, submitted: string) 
     if ((recent?.count ?? 0) >= 20) throw new HttpError(429, "Too many submissions");
     const [existing] = await tx.select().from(solves).where(and(eq(solves.teamId, teamId), eq(solves.challengeId, id))).limit(1);
     if (existing) return "duplicate" as const;
-    const correct = equalSecret(submitted.trim(), flagFor(teamId, id));
+    const correct = equalSecret(submitted.trim(), flagForChallenge(teamId, id));
     await tx.insert(submissions).values({ teamId, challengeId: id, correct });
     if (!correct) return "incorrect" as const;
     const award = await tx.insert(solves).values({ teamId, challengeId: id, points: challenge.points }).onConflictDoNothing().returning();

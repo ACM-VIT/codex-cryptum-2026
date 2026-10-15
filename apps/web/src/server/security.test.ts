@@ -1,22 +1,23 @@
 import assert from "node:assert/strict";
 import { scryptSync } from "node:crypto";
 import { test } from "vitest";
-import { digest, equalSecret, flagFor, newToken, verifyAccessCode } from "./security";
+import { decryptAccessCode, digest, encryptAccessCode, equalSecret, flagFor, hashAccessCode, newAccessCode, newToken, verifyAccessCode } from "./security";
 import { filterReply, INSPECTION_LIMIT, isL5Blocked, isL6Blocked, REDACTION } from "./filters";
 import { body, challengeId, HttpError, sameOrigin } from "./http";
 import { z } from "zod";
 
-const flag = "CTF{synthetic_l6_smart_flag}";
+const flag = "cdx{synthetic_l6_smart_flag}";
 
-test("flags use the required cdx HMAC format and are isolated by team and challenge", () => {
+test("flags use the cdx phrase format and are isolated by team and challenge", () => {
   const secret = "s".repeat(32);
-  assert.equal(flagFor("team-a", 5, secret), "cdx{172f9919bc83f81f984b434c190267fb81b7c5c41d0d8678c16cfad7aafa27f7}");
-  assert.notEqual(flagFor("team-a", 5, secret), flagFor("team-b", 5, secret));
-  assert.notEqual(flagFor("team-a", 5, secret), flagFor("team-a", 6, secret));
+  assert.equal(flagFor("team-a", 5, "same_secret_new_shape", secret), "cdx{same_secret_new_shape_172f9919bc83f81f}");
+  assert.notEqual(flagFor("team-a", 5, "same_secret_new_shape", secret), flagFor("team-b", 5, "same_secret_new_shape", secret));
+  assert.notEqual(flagFor("team-a", 5, "same_secret_new_shape", secret), flagFor("team-a", 6, "same_secret_new_shape", secret));
   for (let id = 1; id <= 9; id++) {
-    assert.match(flagFor("synthetic-team", id, secret), /^cdx\{[a-f0-9]{64}\}$/);
+    assert.match(flagFor("synthetic-team", id, "synthetic_phrase", secret), /^cdx\{synthetic_phrase_[a-f0-9]{16}\}$/);
   }
-  assert.throws(() => flagFor("team-a", 5, "short"));
+  assert.throws(() => flagFor("team-a", 5, "same_secret_new_shape", "short"));
+  assert.throws(() => flagFor("team-a", 5, "Not A Phrase}", secret));
 });
 
 test("session tokens are random, hashed, and safely compared", () => {
@@ -36,9 +37,34 @@ test("scrypt salt:hex team credentials fail closed", async () => {
   assert.equal(await verifyAccessCode("correct-code", "malformed"), false);
 });
 
+test("generated team codes are readable, random, and verify against their hash", async () => {
+  const code = newAccessCode();
+  assert.match(code, /^CC-[A-HJ-NP-Z2-9]{10}$/);
+  assert.notEqual(code, newAccessCode());
+  const stored = await hashAccessCode(code);
+  assert.notEqual(stored, await hashAccessCode(code));
+  assert.equal(await verifyAccessCode(code, stored), true);
+  assert.equal(await verifyAccessCode(newAccessCode(), stored), false);
+});
+
+test("stored team codes decrypt only with the original secret and fail closed when tampered", () => {
+  const secret = "k".repeat(32);
+  const stored = encryptAccessCode("CC-ABCDEFGH23", secret);
+  assert.doesNotMatch(stored, /CC-ABCDEFGH23/);
+  assert.notEqual(stored, encryptAccessCode("CC-ABCDEFGH23", secret));
+  assert.equal(decryptAccessCode(stored, secret), "CC-ABCDEFGH23");
+  assert.equal(decryptAccessCode(stored, "z".repeat(32)), null);
+  const parts = stored.split(":");
+  const tampered = [...parts.slice(0, 3), `${parts[3]?.startsWith("A") ? "B" : "A"}${parts[3]?.slice(1)}`].join(":");
+  assert.equal(decryptAccessCode(tampered, secret), null);
+  assert.equal(decryptAccessCode(null, secret), null);
+  assert.equal(decryptAccessCode("malformed", secret), null);
+  assert.throws(() => encryptAccessCode("CC-ABCDEFGH23", "short"));
+});
+
 test("L5 intentionally filters exact case-sensitive strings only", () => {
   assert.equal(isL5Blocked(`prefix ${flag} suffix`, flag), true);
-  assert.equal(isL5Blocked(flag.toLowerCase(), flag), false);
+  assert.equal(isL5Blocked(flag.toUpperCase(), flag), false);
   assert.equal(isL5Blocked([...flag].join(" "), flag), false);
   assert.equal(filterReply(5, flag, flag), REDACTION);
 });

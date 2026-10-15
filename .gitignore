@@ -34,3 +34,12 @@ models/
 *.onnx
 *.bin
 evaluation-local*.json
+CLAUDE.local.md
+.claude/
+venv/
+.mypy_cache/
+.idea/
+.vscode/
+.eslintcache
+.turbo/
+Thumbs.db

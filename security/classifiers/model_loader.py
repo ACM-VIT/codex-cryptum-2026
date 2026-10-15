@@ -137,7 +137,11 @@ class ModelRunner:
             # Shield keeps the slot occupied if the native worker outlives the request.
             wrapped = asyncio.wrap_future(future)
             wrapped.add_done_callback(lambda done: None if done.cancelled() else done.exception())
-            result = await asyncio.wait_for(asyncio.shield(wrapped), timeout)
+            # Python 3.11 wait_for may swallow caller cancellation when the
+            # shielded result completes concurrently. Await directly inside a
+            # timeout scope so startup/request cancellation always propagates.
+            async with asyncio.timeout(timeout):
+                result = await asyncio.shield(wrapped)
             if not valid_score(result):
                 raise SecurityError("invalid_model_response")
             return float(result)

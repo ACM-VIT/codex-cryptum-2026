@@ -80,10 +80,10 @@ same-origin checks. Restart Next.js after adding server environment settings.
 
 For a production build, use `pnpm build` then `pnpm start`, while running the Python
 bridge as a separately supervised private process. Hosting owns process supervision,
-HTTPS, secrets and admission capacity. Team creation/account UI exists on the
-unmerged `team-creation` branch; it must be approved/integrated before claiming
-registration works in this checkout. Real Google OAuth needs interactive account
-verification and correct registered callbacks. See [../CTF_TEST_REPORT.md](../CTF_TEST_REPORT.md)
+HTTPS, secrets and admission capacity. Team creation/account UI from `feat/dev` is now included in this checkout after
+the local merge. The merged PostgreSQL integration suite passed all nine cases.
+Real Google OAuth still needs interactive account verification and correct
+registered callbacks. See [../CTF_TEST_REPORT.md](../CTF_TEST_REPORT.md)
 for tested and unverified paths.
 
 ### Thinking-mode boundary

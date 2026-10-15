@@ -129,3 +129,30 @@ async def test_standalone_classifier_rejects_non_integer_challenge(level):
     classifier = MLInputClassifier(load_config(7).security.input_classifier)
     with pytest.raises(SecurityError, match="configuration_unavailable"):
         await classifier.classify_input("Ordinary fixture", level)
+
+
+async def test_ready_result_does_not_swallow_caller_cancellation(monkeypatch):
+    """Python 3.11 wait_for can lose cancellation when completion wins the race."""
+    from concurrent.futures import Future
+
+    runner = ModelRunner(load_config(7).security.input_classifier)
+    native = Future()
+    native.set_result(0.1)
+    monkeypatch.setattr(runner._executor, "submit", lambda *args: native)
+
+    def completing_with_cancellation(future):
+        loop = asyncio.get_running_loop()
+        wrapped = loop.create_future()
+        task = asyncio.current_task()
+        # Let the shield complete immediately before cancellation is delivered.
+        # Control callback ordering instead of depending on OS/thread speed.
+        loop.call_soon(wrapped.set_result, future.result())
+        loop.call_soon(loop.call_soon, task.cancel)
+        return wrapped
+
+    monkeypatch.setattr(asyncio, "wrap_future", completing_with_cancellation)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.create_task(runner.score("cancellation fixture"))
+    finally:
+        runner.close()

@@ -1,5 +1,8 @@
 # Codex Cryptum local application test report
 
+The original QA snapshot below is retained. See the [feat/dev merge follow-up](#featdev-merge-follow-up)
+for current team-creation integration and post-merge test results.
+
 Date: 2026-10-15. Branch: `llm-guardrails`, starting HEAD `0184f95`.
 Overall launch status: **PARTIALLY**. The application runs and tested flows work,
 but complete participant solutions for Levels 2–9 and real Google OAuth have not
@@ -152,3 +155,39 @@ processes. Application LLM selection still uses existing root `LLM_*` settings.
 The alternative native Python pipeline uses `LLM_PROVIDER` plus `OPENAI_*` or
 `OLLAMA_*`; see [security/DEPLOYMENT.md](security/DEPLOYMENT.md). Installing OpenAI
 support does not move backend authentication, persistence or scoring into Python.
+
+## feat/dev merge follow-up
+
+The PR now targets `feat/dev`. Its latest fetched commit, `9f259c0`, was merged
+locally into `llm-guardrails`, including the team creation, team-code storage,
+account/session handling, navigation and database migrations previously tested on
+a separate branch. `origin/main` (`15fe01a`) is already an ancestor of that target.
+The earlier missing `/api/teams` blocker describes the pre-merge snapshot, not the
+current source: the production build now includes `/api/teams`, `/api/team`,
+`/api/session/logout` and `/team`.
+
+Conflict resolution preserves all backend team helpers and the `feat/dev`
+phrase-plus-team-HMAC flag contract. Level 7/8 ML guardrail tests, provider/thinking
+regressions and cross-team/challenge flag assertions were retained. No intentional
+CTF vulnerability, classifier threshold or model weight was changed.
+
+Post-merge validation on this Linux host:
+
+- JavaScript suites: **128 passed** (5 catalog, 123 web); the 9 database cases are
+  excluded from that ordinary selection and were run separately.
+- Merged PostgreSQL integration against the isolated QA database: **9 passed**.
+- Python 3.11.16 core/mock suite: **320 passed**, 15 integration cases deselected.
+- Python 3.12.14 full selection with real cached CPU classifiers/local Ollama:
+  **332 passed, 3 skipped**; the three OpenAI cases were separately run and passed.
+- Official SDK real OpenAI integration: **3 passed**, including both levels with
+  actual pretrained classifiers and synthetic protected contexts.
+- Lint, typecheck, production Next.js build, Ruff, mock CLI and Python wheel: PASS.
+
+The macOS Python 3.11 CI failure was traced to startup-timeout enforcement, not
+failed ARM64 ML dependency installation. A deterministic Python 3.11 cancellation
+regression and explicit startup deadline guards now pass locally. See
+[security/PORTABILITY_REPORT.md](security/PORTABILITY_REPORT.md#macos-python-311-ci-investigation-and-merge-follow-up).
+**The changed code has not yet passed the actual macOS GitHub Actions job.**
+No push was made. OAuth interaction, event-model solvability for Levels 2–9,
+and production rollout/capacity remain unverified; full event readiness is still
+PARTIAL. No additional exploit search was performed during this merge repair.

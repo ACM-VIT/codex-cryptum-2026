@@ -580,3 +580,55 @@ with the model organizers actually deploy. No production readiness claim is made
 Earlier uncommitted application QA/bridge/thinking fixes remain in the working tree;
 they are separately identified in the root report. No unrelated frontend/backend
 feature was added as part of Python OpenAI provider support.
+
+## feat/dev merge and startup cancellation follow-up
+
+The PR target changed to `feat/dev`; its `9f259c0` was merged locally with all four
+conflicts resolved. Team-code helpers and phrase-based backend flags were preserved;
+ML guardrail/provider/reasoning tests were retained and use the updated `cdx` fixtures.
+No model weights, classifier thresholds, native Python flag derivation or intentional
+CTF vulnerabilities were changed. See the detailed
+[conflict and CI investigation](PORTABILITY_REPORT.md#macos-python-311-ci-investigation-and-merge-follow-up).
+
+Actual macOS job `116282227764` installed the pinned ARM64 dependencies and passed
+CPU ML imports, then failed only the startup-timeout assertion (316 passed, 1 failed).
+A deterministic local Python 3.11 probe reproduced swallowed cancellation in
+`asyncio.wait_for` when completion raced the caller's cancellation. The classifier
+runner now uses a timeout context around the shielded future, and runtime startup
+checks one absolute deadline before permitting readiness. Three new regressions
+failed before this fix and now pass; the original failing test was retained.
+
+Latest local results supersede earlier counts above:
+
+- **Python 3.11.16:** 320 unit/mock tests passed; 15 real integration cases deselected.
+- **Python 3.12.14:** 332 passed, 3 OpenAI cases skipped in the full cached-model/local
+  Ollama selection. This includes 12 real classifier/Ollama integration cases.
+- **Real OpenAI SDK:** all 3 separately gated integration cases passed, including
+  Level 7 and Level 8 with actual CPU classifiers and synthetic protected contexts.
+- **JavaScript:** 128 passed (5 catalog + 123 web); 9 DB cases run separately.
+- **PostgreSQL:** 9 merged route/database integration cases passed on isolated QA data.
+- Four affected startup/cancellation tests repeated ten times per Python version:
+  40/40 on 3.11 and 40/40 on 3.12.
+- JS lint/typecheck/production build, Ruff/format, mock CLI and Python wheel passed.
+
+Reproduction commands used existing dependencies/cache and no model downloads:
+
+```text
+uv run --no-sync python -m pytest -q -m "not integration"
+uv run --no-sync python -c "import os, pytest; os.environ['HF_HUB_OFFLINE']='1'; os.environ['CRYPTUM_RUN_REAL_INTEGRATION']='1'; raise SystemExit(pytest.main(['-q']))"
+pnpm test
+pnpm test:db
+pnpm lint
+pnpm typecheck
+pnpm build
+```
+
+The local Python 3.11 suite ran in a separate uv environment to keep the working
+Python 3.12 ML environment intact. Real OpenAI tests used the explicit opt-in procedure
+documented above with the already supplied API configuration; no credentials or
+protected responses were printed. Database tests used the existing disposable local
+QA database, not the supplied production database.
+
+**macOS CI verification: PENDING.** The changed code has not run on GitHub's macOS
+runner; the original failed job is not claimed fixed. No automatic push was made.
+Event solvability, interactive Google OAuth and production capacity remain unverified.
