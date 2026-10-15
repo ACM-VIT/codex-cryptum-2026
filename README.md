@@ -132,4 +132,4 @@ adapter or HMAC derivation. The Python pipeline now supports both Ollama and the
 official OpenAI SDK; see [provider setup](security/README.md#selecting-the-python-llm-provider). The Python work does not implement authentication, scoring, or any
 other challenge levels.
 
-Leaderboards refresh every three seconds and immediately on reconnect or tab focus. Official scores come from recorded solves. Level 10 uses isolated copies of registered teams, initialized from their real scores; practice edits persist until reset. At least two registered teams are required.
+Leaderboards refresh every three seconds and immediately on reconnect or tab focus. Official scores come from recorded solves. Level 10 is hidden from the catalog and found through occasional assistant hints; it uses isolated copies of registered teams, initialized from their real scores; practice edits persist until reset. At least two registered teams are required.

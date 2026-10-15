@@ -3,7 +3,7 @@
 ## Participant flow
 
 - **Levels 1–9:** send prompts, inspect responses, recover your team's flag, submit it.
-- **Level 10:** explore the isolated leaderboard, reach first place with your team, and verify your result. No chat or flag submission.
+- **Level 10 (hidden):** not listed in the catalog. Assistants on levels 1–9 drop a cryptic hint about `/api/challenge/leaderboard` on about 1 in 8 replies. Teams that find the isolated leaderboard, reach first place, and verify through the API earn 1000 points. No chat or flag submission.
 
 The API tells the UI which interface to show through `interaction` and `completionMethod`. Official points come from unique server-created solve records, never from sandbox scores.
 
@@ -40,15 +40,17 @@ control; OpenAI prompts do not. See `security/DEPLOYMENT.md` for the private bri
 | Level | Prompt | Input guard | Output guard |
 | --- | --- | --- | --- |
 | 1 | Open | None | None |
-| 2 | Private | None | None |
-| 3 | Hardened | None | None |
-| 4 | Hardened | Keyword | None |
-| 5 | Hardened | None | Exact flag match |
-| 6 | Hardened | None | Encoding-aware, limited inspection window |
-| 7 | Hardened | Classifier | None |
-| 8 | Hardened | Classifier | Classifier |
-| 9 | Hardened | Conversation classifier | Classifier |
+| 2 | Private, closing words | None | None |
+| 3 | Vault, 12-character pieces | None | None |
+| 4 | Private, closing words | Keyword | Exact match on closing words |
+| 5 | Private, closing words | None | Exact match on flag and closing words |
+| 6 | Private, closing words | None | Encoding-aware on flag and closing words, limited inspection window |
+| 7 | Private, closing words | Classifier | Encoding-aware on closing words, limited inspection window |
+| 8 | Private, closing words | Classifier | Classifier on flag, encoding-aware on closing words |
+| 9 | Vault, 6-character pieces | Blocklist | Leak filter and conversation judge |
 | 10 | No model | Sandbox exploit | Server verification |
+
+Private levels keep the flag out of the model's instructions until the player types that level's closing words after the model has explained them, so authority claims cannot leak it. The model only explains the closing words when asked for its rules. From level 4 on, that explanation passes through an output filter too, so players have to get the closing words out in a shape the filter misses. Vault levels release one numbered piece per message. Neither can be won with a single message.
 
 These weaknesses are intentional CTF mechanics. Do not use them to protect real secrets.
 

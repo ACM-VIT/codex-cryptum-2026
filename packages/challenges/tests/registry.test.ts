@@ -38,7 +38,7 @@ describe("challenge registry", () => {
     const matrix = [
       ["open", "none", "none"],
       ["private", "none", "none"],
-      ["notes", "none", "none"],
+      ["vault", "none", "none"],
       ["private", "keyword", "none"],
       ["private", "none", "exact"],
       ["private", "none", "normalized"],
@@ -53,15 +53,16 @@ describe("challenge registry", () => {
     }
     expect(getChallengeMetadata(9)?.turnLimit).toBeGreaterThan(0);
     expect(getChallengeDefinition(10)).toEqual({ id: 10, execution: { kind: "sandbox" } });
-    expect(getChallengeMetadata(10)).toMatchObject({ interaction: "sandbox", completionMethod: "sandbox", points: 1000, turnLimit: null });
-    expect(getChallengeMetadata(10)?.description).toMatch(/isolated leaderboard sandbox/);
-    expect(getChallengeMetadata(10)?.description).toMatch(/your team to first place/i);
+    expect(getChallengeMetadata(10)).toMatchObject({ interaction: "sandbox", completionMethod: "sandbox", points: 1000, turnLimit: null, hidden: true });
+    expect(challengeCatalog.filter((challenge) => challenge.hidden).map(({ id }) => id)).toEqual([10]);
+    expect(getChallengeMetadata(10)?.description).toMatch(/sandbox API/);
+    expect(getChallengeMetadata(10)?.description).toMatch(/route to first place/i);
   });
 
   it("exports only public metadata without execution policies or secret values", () => {
     expect(Object.keys(publicExports).sort()).toEqual(["challengeCatalog", "getChallengeMetadata"]);
     for (const challenge of challengeCatalog) {
-      expect(Object.keys(challenge).sort()).toEqual([
+      expect(Object.keys(challenge).filter((key) => key !== "hidden").sort()).toEqual([
         "completionMethod", "defenses", "description", "difficulty", "hint", "id",
         "interaction", "points", "subtitle", "title", "turnLimit",
       ]);

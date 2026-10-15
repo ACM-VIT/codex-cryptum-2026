@@ -69,13 +69,13 @@ const slides = [
   },
   {
     time: "12:00–14:00",
-    title: "Another route to the top.",
-    kicker: "THE LEADERBOARD",
-    body: "The competition also includes an intentionally vulnerable leaderboard. Explore authorization and score handling in the dedicated sandbox supplied by the organizers.",
+    title: "Listen closely.",
+    kicker: "BETWEEN THE LINES",
+    body: "Not every point on the board comes from a flag. The assistants talk a lot, and now and then they say more than they mean to.",
     points: [
-      "Only the designated challenge sandbox is in scope.",
+      "Only this event's own app and API are in scope.",
       "Do not attack authentication, hosting, or unrelated services.",
-      "Ask organizers how to record findings and how the sandbox resets.",
+      "Official standings come only from recorded solves.",
     ],
   },
   {

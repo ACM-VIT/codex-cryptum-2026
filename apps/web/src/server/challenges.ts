@@ -31,9 +31,9 @@ async function activeChallenge(tx: Tx, id: number) {
 
 export async function catalog() {
   const rows = await getDb().select().from(challenges).where(eq(challenges.active, true)).orderBy(asc(challenges.id));
-  return z.array(challengeSchema).parse(rows.map((row) => {
+  return z.array(challengeSchema).parse(rows.flatMap((row) => {
     const { metadata } = challengeConfig(row.id);
-    return { ...row, interaction: metadata.interaction, completionMethod: metadata.completionMethod };
+    return metadata.hidden ? [] : [{ ...row, interaction: metadata.interaction, completionMethod: metadata.completionMethod }];
   }));
 }
 

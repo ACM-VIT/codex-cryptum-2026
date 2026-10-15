@@ -15,7 +15,7 @@ export async function sandboxLeaderboard() {
     await lock(tx, "sandbox:leaderboard");
     await syncSandboxTeams(tx);
     const rows = await tx.select().from(sandboxTeams).orderBy(desc(sandboxTeams.score), asc(sandboxTeams.id));
-    return { entries: rows.map((row, index) => ({ ...publicEntry(row), rank: index + 1 })), scope: SCOPE, objective: "Move your team to the top of this isolated board, then verify completion." };
+    return { entries: rows.map((row, index) => ({ ...publicEntry(row), rank: index + 1 })), scope: SCOPE, objective: "Move your team to the top of this isolated board. Entries change through PATCH /api/challenge/leaderboard/teams/{team_id}; verify with POST /api/challenge/leaderboard/complete." };
   });
 }
 
