@@ -43,14 +43,14 @@ control; OpenAI prompts do not. See `security/DEPLOYMENT.md` for the private bri
 | 2 | Private, closing words | None | None |
 | 3 | Vault, 12-character pieces | None | None |
 | 4 | Private, closing words | Keyword | None |
-| 5 | Private, closing words | None | Exact flag match |
-| 6 | Private, closing words | None | Encoding-aware, limited inspection window |
-| 7 | Private, closing words | Classifier | None |
-| 8 | Private, closing words | Classifier | Classifier |
+| 5 | Private, closing words | None | Exact match on flag and closing words |
+| 6 | Private, closing words | None | Encoding-aware on flag and closing words, limited inspection window |
+| 7 | Private, closing words | Classifier | Encoding-aware on closing words, limited inspection window |
+| 8 | Private, closing words | Classifier | Classifier on flag, encoding-aware on closing words |
 | 9 | Vault, 6-character pieces | Blocklist | Leak filter and conversation judge |
 | 10 | No model | Sandbox exploit | Server verification |
 
-Private levels keep the flag until the player types that level's closing words, which the model only reveals when asked for its rules. Vault levels release one numbered piece per message. Neither can be won with a single message.
+Private levels keep the flag out of the model's instructions until the player types that level's closing words after the model has explained them, so authority claims cannot leak it. The model only explains the closing words when asked for its rules. From level 5 on, that explanation passes through an output filter too, so players have to get the closing words out in a shape the filter misses. Vault levels release one numbered piece per message. Neither can be won with a single message.
 
 These weaknesses are intentional CTF mechanics. Do not use them to protect real secrets.
 
