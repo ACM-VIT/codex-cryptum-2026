@@ -7,7 +7,7 @@ import { challengeConfig, sandboxChallengeId } from "./challenge-config";
 import { REDACTION } from "./filters";
 import type { ModelRequest } from "./model-provider";
 
-function request(id: number, flag = "CTF{private}") {
+function request(id: number, flag = "cdx{private}") {
   const definition = getChallengeDefinition(id);
   if (!definition) throw new Error("Missing test challenge");
   return { definition, flag,
@@ -52,14 +52,14 @@ it("keyword guard runs before any generation", async () => {
   expect(provider).not.toHaveBeenCalled();
 });
 
-it.each(["ＣＴＦ｛ｐｒｉｖａｔｅ｝", Buffer.from("CTF{private}").toString("base64"), "CTF { private }"])("normalized output guard blocks %s", async (text) => {
+it.each(["ｃｄｘ｛ｐｒｉｖａｔｅ｝", Buffer.from("cdx{private}").toString("base64"), "cdx { private }"])("normalized output guard blocks %s", async (text) => {
   const provider = vi.fn().mockResolvedValue(text);
   await expect(runChallengeModel(request(6), provider)).resolves.toBe(REDACTION);
 });
 
 it("execution depends on the policy, not the numeric challenge id", async () => {
   const { definition } = request(5);
-  await expect(runChallengeModel({ ...request(1), definition: { ...definition, id: 1234 } }, vi.fn().mockResolvedValue("CTF{private}"))).resolves.toBe(REDACTION);
+  await expect(runChallengeModel({ ...request(1), definition: { ...definition, id: 1234 } }, vi.fn().mockResolvedValue("cdx{private}"))).resolves.toBe(REDACTION);
 });
 
 it("fails closed on unknown configuration", () => {
@@ -70,5 +70,5 @@ it("public metadata contains no provider or private execution configuration", ()
   for (const challenge of challengeCatalog) {
     expect(Object.keys(challenge).sort()).toEqual(["id", "title", "subtitle", "description", "difficulty", "points", "defenses", "hint", "turnLimit", "interaction", "completionMethod"].sort());
   }
-  expect(JSON.stringify(challengeCatalog)).not.toMatch(/CTF\{|LLM_API_KEY|promptPolicy|inputGuard|outputGuard/);
+  expect(JSON.stringify(challengeCatalog)).not.toMatch(/cdx\{|LLM_API_KEY|promptPolicy|inputGuard|outputGuard/);
 });

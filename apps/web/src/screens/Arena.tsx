@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { PromptInputBox } from "@/components/ui/ai-prompt-box";
 import {
@@ -22,6 +22,10 @@ export function Arena() {
 function ArenaContent({ id }: { id: number }) {
   const { session, setSession, challenges, busy, transact, toast } = useApp();
   const challenge = challenges.find((c) => c.id === id);
+  const ordered = [...challenges].sort((a, b) => a.id - b.id);
+  const position = ordered.findIndex((c) => c.id === id);
+  const previous = position > 0 ? ordered[position - 1] : undefined;
+  const next = position >= 0 ? ordered[position + 1] : undefined;
   const [prompt, setPrompt] = useState(""),
     [flag, setFlag] = useState("");
   const [error, setError] = useState(""),
@@ -113,16 +117,30 @@ function ArenaContent({ id }: { id: number }) {
   return (
     <AnimatedPage className="challenge-page">
       <div className="challenge-panel-toolbar">
-        <Link className="challenge-back" href="/arena">
-          <ArrowLeft size={16} /> Back to challenges
+        <Link className="challenge-back" href="/arena" aria-label="Back to challenges">
+          <ArrowLeft size={16} /> <span className="label-long">Back to challenges</span><span className="label-short">All</span>
         </Link>
-        <Link
-          className="challenge-close icon-button"
-          href="/arena"
-          aria-label="Close challenge and return to challenges"
-        >
-          <X size={22} />
-        </Link>
+        <div className="challenge-pager">
+          <nav className="challenge-pager-links" aria-label="Challenge navigation">
+            {previous && (
+              <Link className="challenge-back" href={`/arena/${previous.id}`} aria-label={`Previous challenge: ${previous.title}`}>
+                <ArrowLeft size={16} /> <span className="label-long">Previous</span><span className="label-short">Prev</span>
+              </Link>
+            )}
+            {next && (
+              <Link className="challenge-back" href={`/arena/${next.id}`} aria-label={`Next challenge: ${next.title}`}>
+                <span className="label-long">Next challenge</span><span className="label-short">Next</span> <ArrowRight size={16} />
+              </Link>
+            )}
+          </nav>
+          <Link
+            className="challenge-close icon-button"
+            href="/arena"
+            aria-label="Close challenge and return to challenges"
+          >
+            <X size={22} />
+          </Link>
+        </div>
       </div>
       <section className="challenge-overview" aria-labelledby="challenge-title">
         <h1 id="challenge-title">{challenge.title}</h1>
@@ -186,6 +204,11 @@ function ArenaContent({ id }: { id: number }) {
           <output className={`flag-feedback ${accepted ? "success-text" : "error-text"}`}>
             {feedback}
           </output>
+        )}
+        {accepted && next && (
+          <Link className="button challenge-next" href={`/arena/${next.id}`}>
+            Next challenge: {next.title} <ArrowRight size={16} />
+          </Link>
         )}
       </section>
       {sandbox ? <SandboxLeaderboard showOrganizerTools={false} /> : <section

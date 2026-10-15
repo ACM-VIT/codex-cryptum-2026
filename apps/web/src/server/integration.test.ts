@@ -13,15 +13,18 @@ vi.mock("./better-auth", () => ({
 }));
 
 import { getDb, closeDb, teams, sessions, messages, submissions, solves, sandboxTeams, exploitEvents, chatOperations } from "@cryptum/db";
-import { and, eq, sql } from "drizzle-orm";
-import { POST as join, GET as session } from "../app/api/session/route";
+import { user as authUser } from "@cryptum/db/auth-schema";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
+import { POST as join, GET as session, DELETE as leave } from "../app/api/session/route";
+import { POST as logout } from "../app/api/session/logout/route";
+import { POST as createTeam } from "../app/api/teams/route";
+import { GET as team, PATCH as renameRoute } from "../app/api/team/route";
 import { POST as submit } from "../app/api/challenges/[id]/submissions/route";
 import { POST as chat } from "../app/api/challenges/[id]/messages/route";
 import { DELETE as resetConversation } from "../app/api/challenges/[id]/conversation/route";
 import { PATCH as patch } from "../app/api/challenge/leaderboard/teams/[id]/route";
 import { POST as complete } from "../app/api/challenge/leaderboard/complete/route";
-import { officialLeaderboard } from "./challenges";
-import { flagFor } from "./security";
+import { flagForChallenge, officialLeaderboard } from "./challenges";
 
 const enabled = process.env.CRYPTUM_RUN_DATABASE_TESTS === "1";
 const origin = "https://cryptum-integration.example";
@@ -103,12 +106,105 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
     expect((await submit(request("challenges/5/submissions", "POST", { flag: "guess" }, null), id("5"))).status).toBe(401);
   });
 
+  it("lets a Google user create one team whose shared code admits teammates", async () => {
+    const creator = `test-google-${randomUUID()}`;
+    const teammate = `test-google-${randomUUID()}`;
+    const teamName = `Created ${randomUUID().slice(0, 8)}`;
+    try {
+      expect((await createTeam(request("teams", "POST", { teamName }, null, ""))).status).toBe(401);
+      expect((await createTeam(request("teams", "POST", { teamName: "x" }, creator, ""))).status).toBe(400);
+      expect((await createTeam(request("teams", "POST", { teamName: "bad\u0007name" }, creator, ""))).status).toBe(400);
+      const created = await createTeam(request("teams", "POST", { teamName }, creator, ""));
+      expect(created.status).toBe(201);
+      const result = await created.json();
+      expect(result.accessCode).toMatch(/^CC-[A-HJ-NP-Z2-9]{10}$/);
+      expect(result.session.teamName).toBe(teamName);
+      const [cookie] = created.headers.get("set-cookie")?.split(";") ?? [];
+      if (!cookie) throw new Error("Expected creator team session cookie");
+      expect((await (await session(request("session", "GET", {}, creator, cookie))).json()).id).toBe(result.session.id);
+      const [stored] = await getDb().select().from(teams).where(eq(teams.id, result.session.id));
+      expect(stored?.createdBy).toBe(creator);
+      expect(stored?.accessCodeHash).not.toContain(result.accessCode);
+      const again = await createTeam(request("teams", "POST", { teamName: `${teamName} 2` }, creator, ""));
+      expect(again.status).toBe(201);
+      expect((await again.json()).session.teamName).toBe(`${teamName} 2`);
+      expect(await getDb().select().from(teams).where(eq(teams.createdBy, creator))).toHaveLength(2);
+      const taken = await createTeam(request("teams", "POST", { teamName }, teammate, ""));
+      expect(taken.status).toBe(409);
+      expect((await taken.json()).error).toBe("Team name is taken");
+      const teammateJoin = await join(request("session", "POST", { accessCode: ` ${result.accessCode.toLowerCase()} ` }, teammate, ""));
+      expect(teammateJoin.status).toBe(200);
+      const [teammateCookie] = teammateJoin.headers.get("set-cookie")?.split(";") ?? [];
+      expect((await join(request("session", "POST", { accessCode: "CC-WRONGCODE" }, teammate, ""))).status).toBe(403);
+      await getDb().insert(authUser).values([
+        { id: creator, name: "Creator Person", email: `${creator}@example.test` },
+        { id: teammate, name: "Teammate Person", email: `${teammate}@example.test` },
+      ]);
+      const details = await (await team(request("team", "GET", {}, creator, cookie))).json();
+      expect(details.accessCode).toBe(result.accessCode);
+      expect(stored?.accessCodeEncrypted).not.toContain(result.accessCode);
+      expect(details.members).toEqual([
+        { name: "Creator Person", you: true, creator: true },
+        { name: "Teammate Person", you: false, creator: false },
+      ]);
+      expect((await team(request("team", "GET", {}, teammate, cookie))).status).toBe(401);
+      expect(details.canRename).toBe(true);
+      expect((await (await team(request("team", "GET", {}, teammate, teammateCookie))).json()).canRename).toBe(false);
+      expect((await renameRoute(request("team", "PATCH", { teamName: `${teamName} by mate` }, teammate, teammateCookie))).status).toBe(403);
+      expect((await renameRoute(request("team", "PATCH", { teamName: `${teamName} 2` }, creator, cookie))).status).toBe(409);
+      const renamed = await renameRoute(request("team", "PATCH", { teamName: `${teamName} renamed` }, creator, cookie));
+      expect(renamed.status).toBe(200);
+      expect((await renamed.json()).teamName).toBe(`${teamName} renamed`);
+    } finally {
+      await getDb().delete(teams).where(eq(teams.createdBy, creator));
+      await getDb().delete(authUser).where(inArray(authUser.id, [creator, teammate]));
+    }
+  });
+
+  it("keeps membership on log out and deletes a team only when its confirmed last member leaves", async () => {
+    const creator = `test-google-${randomUUID()}`;
+    const teammate = `test-google-${randomUUID()}`;
+    const teamName = `Leaving ${randomUUID().slice(0, 8)}`;
+    const cookieFrom = (response: Response) => {
+      const [cookie] = response.headers.get("set-cookie")?.split(";") ?? [];
+      if (!cookie) throw new Error("Expected team session cookie");
+      return cookie;
+    };
+    try {
+      const created = await createTeam(request("teams", "POST", { teamName }, creator, ""));
+      const { accessCode, session: { id: createdId } } = await created.json();
+      const creatorCookie = cookieFrom(created);
+      const teammateCookie = cookieFrom(await join(request("session", "POST", { accessCode }, teammate, "")));
+      expect((await logout(request("session/logout", "POST", {}, teammate, teammateCookie))).status).toBe(200);
+      const restored = await session(request("session", "GET", {}, teammate, teammateCookie));
+      expect((await restored.json()).id).toBe(createdId);
+      expect(cookieFrom(restored)).not.toBe(teammateCookie);
+      expect(await getDb().select().from(sessions).where(and(eq(sessions.teamId, createdId), eq(sessions.userId, teammate)))).toHaveLength(1);
+      const otherDevice = await session(request("session", "GET", {}, teammate, ""));
+      expect((await otherDevice.json()).id).toBe(createdId);
+      expect(await getDb().select().from(sessions).where(and(eq(sessions.teamId, createdId), eq(sessions.userId, teammate), gt(sessions.expiresAt, new Date())))).toHaveLength(2);
+      expect(await (await session(request("session", "GET", {}, `test-google-${randomUUID()}`, ""))).json()).toBeNull();
+      const creatorLeft = await leave(request("session", "DELETE", {}, creator, creatorCookie));
+      expect(await creatorLeft.json()).toEqual({ ok: true, deleted: false });
+      const teammateCookieAgain = cookieFrom(await join(request("session", "POST", { accessCode }, teammate, "")));
+      const unconfirmed = await leave(request("session", "DELETE", {}, teammate, teammateCookieAgain));
+      expect(unconfirmed.status).toBe(409);
+      expect(await getDb().select().from(teams).where(eq(teams.id, createdId))).toHaveLength(1);
+      const confirmed = await leave(request("session", "DELETE", { confirmDelete: true }, teammate, teammateCookieAgain));
+      expect(await confirmed.json()).toEqual({ ok: true, deleted: true });
+      expect(await getDb().select().from(teams).where(eq(teams.id, createdId))).toHaveLength(0);
+      expect(await getDb().select().from(sessions).where(eq(sessions.teamId, createdId))).toHaveLength(0);
+    } finally {
+      await getDb().delete(teams).where(eq(teams.createdBy, creator));
+    }
+  });
+
   it("accepts only the current team's HMAC flag and awards one immutable solve", async () => {
-    const wrong = await submit(request("challenges/5/submissions", "POST", { flag: flagFor(otherId, 5) }), id("5"));
+    const wrong = await submit(request("challenges/5/submissions", "POST", { flag: flagForChallenge(otherId, 5) }), id("5"));
     expect((await wrong.json()).status).toBe("incorrect");
-    const first = await submit(request("challenges/5/submissions", "POST", { flag: flagFor(teamId, 5) }), id("5"));
+    const first = await submit(request("challenges/5/submissions", "POST", { flag: flagForChallenge(teamId, 5) }), id("5"));
     expect((await first.json()).status).toBe("accepted");
-    const repeated = await submit(request("challenges/5/submissions", "POST", { flag: flagFor(teamId, 5) }), id("5"));
+    const repeated = await submit(request("challenges/5/submissions", "POST", { flag: flagForChallenge(teamId, 5) }), id("5"));
     expect((await repeated.json()).status).toBe("duplicate");
     const awards = await getDb().select().from(solves).where(eq(solves.teamId, teamId));
     expect(awards).toHaveLength(1);

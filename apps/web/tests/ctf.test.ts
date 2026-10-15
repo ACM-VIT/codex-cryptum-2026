@@ -24,10 +24,10 @@ describe("participant API boundary", () => {
     expect(fetcher).toHaveBeenCalledWith("/api/session", expect.objectContaining({ method: "GET", credentials: "include", signal: expect.any(AbortSignal) }));
   });
 
-  it("joins using only the supplied team name and access code", async () => {
+  it("joins using only the supplied access code", async () => {
     const fetcher = mockResponse(session);
-    expect(await api.join("Live team", "secret-code")).toEqual(session);
-    expect(fetcher).toHaveBeenCalledWith("/api/session", expect.objectContaining({ method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ teamName: "Live team", accessCode: "secret-code" }) }));
+    expect(await api.join("secret-code")).toEqual(session);
+    expect(fetcher).toHaveBeenCalledWith("/api/session", expect.objectContaining({ method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accessCode: "secret-code" }) }));
   });
 
   it("sends participant input to the selected challenge", async () => {
@@ -75,9 +75,15 @@ describe("participant API boundary", () => {
   });
 
   it("confirms the server ended the team session", async () => {
+    const fetcher = mockResponse({ ok: true, deleted: false });
+    await expect(api.leave()).resolves.toEqual({ ok: true, deleted: false });
+    expect(fetcher).toHaveBeenCalledWith("/api/session", expect.objectContaining({ method: "DELETE", body: JSON.stringify({ confirmDelete: false }) }));
+  });
+
+  it("logs out without leaving the team", async () => {
     const fetcher = mockResponse({ ok: true });
-    await expect(api.leave()).resolves.toBeUndefined();
-    expect(fetcher).toHaveBeenCalledWith("/api/session", expect.objectContaining({ method: "DELETE" }));
+    await expect(api.logout()).resolves.toBeUndefined();
+    expect(fetcher).toHaveBeenCalledWith("/api/session/logout", expect.objectContaining({ method: "POST" }));
   });
 
   it.each([
