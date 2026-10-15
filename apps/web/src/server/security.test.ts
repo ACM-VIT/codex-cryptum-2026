@@ -39,7 +39,7 @@ test("scrypt salt:hex team credentials fail closed", async () => {
 
 test("generated team codes are readable, random, and verify against their hash", async () => {
   const code = newAccessCode();
-  assert.match(code, /^CC-[A-HJ-NP-Z2-9]{10}$/);
+  assert.match(code, /^\d{6}$/);
   assert.notEqual(code, newAccessCode());
   const stored = await hashAccessCode(code);
   assert.notEqual(stored, await hashAccessCode(code));

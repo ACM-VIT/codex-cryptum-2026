@@ -105,16 +105,23 @@ export async function joinTeam(request: Request, accessCode: string, teamName?: 
 export async function createTeam(request: Request, teamName: string): Promise<{ token: string; teamId: string; accessCode: string }> {
   const user = await requireGoogleUser(request.headers);
   joinLimit(user.id);
-  const accessCode = newAccessCode();
-  const accessCodeHash = await hashAccessCode(accessCode);
   const token = newToken();
-  const teamId = await getDb().transaction(async (tx) => {
-    const [created] = await tx.insert(teams).values({ name: teamName, accessCodeHash, accessCodeEncrypted: encryptAccessCode(accessCode), accessCodeLookup: accessCodeLookup(accessCode), createdBy: user.id }).onConflictDoNothing().returning({ id: teams.id });
-    if (!created) throw new HttpError(409, "Team name is taken");
-    await tx.insert(sessions).values({ userId: user.id, teamId: created.id, tokenHash: digest(token), expiresAt: new Date(Date.now() + SESSION_SECONDS * 1000) });
-    return created.id;
-  });
-  return { token, teamId, accessCode };
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const accessCode = newAccessCode();
+    const accessCodeHash = await hashAccessCode(accessCode);
+    const teamId = await getDb().transaction(async (tx) => {
+      const [created] = await tx.insert(teams).values({ name: teamName, accessCodeHash, accessCodeEncrypted: encryptAccessCode(accessCode), accessCodeLookup: accessCodeLookup(accessCode), createdBy: user.id }).onConflictDoNothing().returning({ id: teams.id });
+      if (!created) {
+        const [taken] = await tx.select({ id: teams.id }).from(teams).where(eq(teams.name, teamName)).limit(1);
+        if (taken) throw new HttpError(409, "Team name is taken");
+        return null;
+      }
+      await tx.insert(sessions).values({ userId: user.id, teamId: created.id, tokenHash: digest(token), expiresAt: new Date(Date.now() + SESSION_SECONDS * 1000) });
+      return created.id;
+    });
+    if (teamId) return { token, teamId, accessCode };
+  }
+  throw new HttpError(503, "Could not allocate a team code");
 }
 
 export async function teamDetails(request: Request): Promise<TeamDetails> {
