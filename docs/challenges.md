@@ -29,7 +29,13 @@ reserve request → input guard → build instructions → model → output guar
 
 Database transactions are short. They are not held open while waiting for the model. Failed requests count toward the rate limit; conversation resets cannot erase that budget. Conflicting requests are rejected, and expired replies are discarded.
 
-The provider uses AI SDK `instructions` for trusted instructions and `messages` for user/assistant history. Generation and classifiers use the same model. Provider errors are sanitized; flags and credentials are not logged.
+The provider uses AI SDK `instructions` for trusted instructions and `messages` for user/assistant history. Levels 7–8 call the private Python pretrained-classifier bridge before generation
+and, for Level 8, before output delivery. Input thresholds remain 0.75/0.80 and
+Level 8 output remains 0.75. Level 9 keeps its existing LLM conversation judge.
+Provider errors are sanitized; flags and credentials are not logged. The shared
+provider returns only final text, strips inline thinking blocks, and rejects
+unexpected reasoning streams. Qwen3 identifiers receive its soft `/no_think`
+control; OpenAI prompts do not. See `security/DEPLOYMENT.md` for the private bridge.
 
 | Level | Prompt | Input guard | Output guard |
 | --- | --- | --- | --- |

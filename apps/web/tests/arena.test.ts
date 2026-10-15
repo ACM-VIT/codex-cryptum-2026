@@ -45,6 +45,21 @@ describe("challenge interaction modes", () => {
     expect(html).not.toContain("Sandbox leaderboard");
   });
 
+  it("hides flag entry when reopening a solved chat challenge", () => {
+    route.id = "9";
+    if (!state.session) throw new Error("Expected a test team session");
+    const solvedState = { ...state, session: { ...state.session, solved: [9] } };
+    const html = renderToStaticMarkup(createElement(AppContext.Provider, { value: solvedState }, createElement(Arena)));
+    expect(html).toContain("Flag captured");
+    expect(html).toContain("Completed");
+    expect(html).not.toContain('aria-controls="flag-entry"');
+    expect(html).not.toContain('id="flag-entry"');
+    expect(html).not.toContain("Reset conversation");
+    expect(html).not.toContain("<textarea");
+    expect(html).not.toContain("Chat is now closed.");
+    expect(html).toContain("Next challenge:");
+  });
+
   it("labels challenge cards with the matching interaction and completion method", () => {
     const html = renderToStaticMarkup(createElement(AppContext.Provider, { value: state }, createElement(ChallengeBento, { items: challenges })));
     expect(html).toContain("Chat · Submit flag");

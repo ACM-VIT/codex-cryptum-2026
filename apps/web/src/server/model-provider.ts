@@ -22,6 +22,11 @@ function modelConfig() {
 // Keep transport hardening while delegating provider requests and parsing to the SDK.
 const providerFetch: typeof fetch = async (input, init) => {
   const response = await fetch(input, { ...init, cache: "no-store", redirect: "error" });
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  if (contentType.includes("text/event-stream") || contentType.includes("application/x-ndjson")) {
+    await response.body?.cancel();
+    throw new Error("Unexpected streaming response");
+  }
   const reader = response.body?.getReader();
   if (!reader) throw new Error("Empty provider response");
   const chunks: Uint8Array[] = [];
@@ -43,26 +48,31 @@ export type ModelProvider = (request: ModelRequest) => Promise<string>;
 
 export function validateModelConfig(): void { modelConfig(); }
 
-const NO_THINK = " /no_think";
-
-export function withoutThinking(text: string): string {
-  if (text.includes("</think>")) return text.slice(text.lastIndexOf("</think>") + "</think>".length).trim();
-  return text.includes("<think>") ? "" : text;
+/** Keep only the final channel; malformed/open reasoning markers fail closed. */
+export function withoutThinking(value: string): string {
+  const endings = [...value.matchAll(/<\/think\s*>/gi)];
+  const last = endings.at(-1);
+  const final = last ? value.slice(last.index + last[0].length).trim() : value;
+  if (/<\s*\/?\s*think\b|<\|analysis\b/i.test(final)) return "";
+  return final;
 }
 
 export async function complete({ instructions, messages, maxOutputTokens = 2048, temperature = 0.3 }: ModelRequest): Promise<string> {
   const { model, ...config } = modelConfig();
-  const qwen = model.startsWith("qwen3");
+  // Only known Qwen3 family identifiers get Qwen's soft prompt control.
+  const qwen = /^(?:qwen3(?::|$)|qwen\/qwen3-)/i.test(model);
   try {
     const result = await generateText({
       model: createOpenAI({ ...config, fetch: providerFetch }).chat(model),
-      instructions: qwen ? instructions + NO_THINK : instructions,
-      messages: qwen ? messages.map((turn) => turn.role === "user" ? { ...turn, content: turn.content + NO_THINK } : turn) : messages,
+      instructions: qwen ? `${instructions} /no_think` : instructions,
+      messages: qwen ? messages.map(turn => turn.role === "user"
+        ? { ...turn, content: `${turn.content} /no_think` } : turn) : messages,
       maxOutputTokens,
       maxRetries: 0,
       timeout: { totalMs: 45_000 },
-      // Luna supports no-reasoning mode: classifiers need only an eight-token verdict.
-      ...(qwen ? {} : { providerOptions: { openai: { reasoningEffort: "none" } } }),
+      // Preserve the existing API control: verified with Luna and local Ollama /v1.
+      // Qwen's soft /no_think hint alone is not a hard disable in that runtime.
+      providerOptions: { openai: { reasoningEffort: "none" } },
       temperature,
       telemetry: { isEnabled: false },
     });

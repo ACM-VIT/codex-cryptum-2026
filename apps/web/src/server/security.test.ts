@@ -13,6 +13,9 @@ test("flags use the cdx phrase format and are isolated by team and challenge", (
   assert.equal(flagFor("team-a", 5, "same_secret_new_shape", secret), "cdx{same_secret_new_shape_172f9919bc83f81f}");
   assert.notEqual(flagFor("team-a", 5, "same_secret_new_shape", secret), flagFor("team-b", 5, "same_secret_new_shape", secret));
   assert.notEqual(flagFor("team-a", 5, "same_secret_new_shape", secret), flagFor("team-a", 6, "same_secret_new_shape", secret));
+  for (let id = 1; id <= 9; id++) {
+    assert.match(flagFor("synthetic-team", id, "synthetic_phrase", secret), /^cdx\{synthetic_phrase_[a-f0-9]{16}\}$/);
+  }
   assert.throws(() => flagFor("team-a", 5, "same_secret_new_shape", "short"));
   assert.throws(() => flagFor("team-a", 5, "Not A Phrase}", secret));
 });
