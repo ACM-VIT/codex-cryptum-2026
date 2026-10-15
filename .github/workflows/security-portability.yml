@@ -39,10 +39,10 @@ jobs:
           enable-cache: true
       - name: Install core and QA dependencies on Intel macOS
         if: ${{ !matrix.ml }}
-        run: uv sync --locked --extra dev --python ${{ matrix.python }}
+        run: uv sync --locked --extra dev --extra openai --python ${{ matrix.python }}
       - name: Install CPU ML runtime on supported architectures (no model weights)
         if: ${{ matrix.ml }}
-        run: uv sync --locked --extra ml --extra dev --python ${{ matrix.python }}
+        run: uv sync --locked --extra ml --extra dev --extra openai --python ${{ matrix.python }}
       - name: Verify CPU ML imports without downloading weights
         if: ${{ matrix.ml }}
         run: uv run --no-sync python -c "import torch; from transformers import AutoModelForSequenceClassification, AutoTokenizer; assert torch.empty(1).device.type == 'cpu'; assert not torch.cuda.is_available(); print(torch.__version__)"

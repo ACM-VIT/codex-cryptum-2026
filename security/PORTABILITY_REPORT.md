@@ -250,3 +250,31 @@ and whitespace checks passed. Offline real preparation and startup preflight als
 passed; measured timings/resources and the integration boundaries are recorded in
 [DEPLOYMENT.md](DEPLOYMENT.md#measured-results-for-this-rework). These observations
 do not certify untested remote hosts, macOS real inference or production throughput.
+
+## OpenAI provider follow-up (2026-10-15)
+
+Added an optional `openai` dependency group with official SDK **2.29.0**, pinned in
+`uv.lock` and compatible with the existing HTTPX 0.28.1 transport. It does not require
+CUDA, Torch, shell activation or local generative-model weights. The existing Linux
+CPU Torch index and all classifier weights/revisions are unchanged. The CI matrix
+now installs this SDK extra on all six existing platform/Python jobs and runs mocked
+provider tests without credentials or paid API calls. This updated matrix has **not**
+been executed remotely as part of this local work.
+
+Python provider selection uses trusted `LLM_PROVIDER`; OpenAI uses explicit
+`OPENAI_*` settings, Ollama retains `OLLAMA_*`. Endpoints, key/model settings,
+timeouts and bounded retries are validated without returning raw provider errors.
+`python -m security --provider openai|ollama --env-file PATH` is shell-independent.
+Configuration parsing uses the existing pathlib/explicit UTF-8 environment loader.
+There is no automatic provider or permissive mock fallback.
+
+Locally tested on Arch Linux x86_64 / Python 3.12.14: official SDK with mocked HTTP,
+real configured OpenAI requests, both levels with real cached CPU classifiers, and
+the existing real local Ollama tests. Real OpenAI tests use synthetic challenge
+contexts and opt in separately from CI. Linux/macOS deployment commands are shared;
+no new native macOS or other-Linux execution claim is made. Intel macOS still cannot
+run the pinned local Torch stack from official wheels; a private classifier bridge
+on a supported host is now available to the Next.js integration. Remote transport
+and host supervision remain deployment responsibilities. See
+[TEST_REPORT.md](TEST_REPORT.md) and [DEPLOYMENT.md](DEPLOYMENT.md) for evidence and
+provider configuration details.

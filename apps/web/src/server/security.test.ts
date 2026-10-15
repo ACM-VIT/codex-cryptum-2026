@@ -8,11 +8,14 @@ import { z } from "zod";
 
 const flag = "CTF{synthetic_l6_smart_flag}";
 
-test("flags use the FastAPI HMAC format and are isolated by team and challenge", () => {
+test("flags use the required cdx HMAC format and are isolated by team and challenge", () => {
   const secret = "s".repeat(32);
-  assert.equal(flagFor("team-a", 5, secret), "CTF{172f9919bc83f81f984b434c190267fb81b7c5c41d0d8678c16cfad7aafa27f7}");
+  assert.equal(flagFor("team-a", 5, secret), "cdx{172f9919bc83f81f984b434c190267fb81b7c5c41d0d8678c16cfad7aafa27f7}");
   assert.notEqual(flagFor("team-a", 5, secret), flagFor("team-b", 5, secret));
   assert.notEqual(flagFor("team-a", 5, secret), flagFor("team-a", 6, secret));
+  for (let id = 1; id <= 9; id++) {
+    assert.match(flagFor("synthetic-team", id, secret), /^cdx\{[a-f0-9]{64}\}$/);
+  }
   assert.throws(() => flagFor("team-a", 5, "short"));
 });
 

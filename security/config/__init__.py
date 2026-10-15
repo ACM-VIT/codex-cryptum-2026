@@ -1,7 +1,6 @@
 """Validated organizer configuration, never participant-supplied configuration."""
 
 import math
-import os
 import re
 from importlib.resources import files
 from pathlib import Path
@@ -10,6 +9,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from security.config.providers import selected_model
 from security.types import Action, SecurityError
 
 INPUT_MODEL = "protectai/deberta-v3-base-prompt-injection-v2"
@@ -101,8 +101,7 @@ def load_config(challenge_id: int, path: Path | None = None) -> ChallengeConfig:
                 rule["action"] = Action(rule["action"])
         if "allowed_roles" in data:
             data["allowed_roles"] = tuple(data["allowed_roles"])
-        if "OLLAMA_MODEL" in os.environ:
-            data["model"] = os.environ["OLLAMA_MODEL"]
+        data["model"] = selected_model(data.get("model", "qwen3:8b"))
         config = ChallengeConfig.model_validate(data)
         if config.challenge_id != challenge_id:
             raise ValueError("Mismatched challenge")

@@ -386,7 +386,7 @@ async def test_backend_startup_and_shutdown_example(managed, monkeypatch):
     import security.examples.backend_integration as example
 
     monkeypatch.setattr(example.httpx, "AsyncClient", lambda: httpx_client)
-    monkeypatch.setattr(example, "OllamaClient", lambda client: ReadyInference())
+    monkeypatch.setattr(example, "create_inference_client", lambda client: ReadyInference())
     monkeypatch.setattr(example.SecurityRuntime, "from_environment", lambda client: runtime)
     returned, client = await start_security()
     assert returned is runtime and client is http
@@ -454,7 +454,7 @@ async def test_failed_backend_startup_closes_owned_resources(managed, monkeypatc
 
     http = SimpleNamespace(aclose=close)
     monkeypatch.setattr(example.httpx, "AsyncClient", lambda: http)
-    monkeypatch.setattr(example, "OllamaClient", lambda client: ReadyInference())
+    monkeypatch.setattr(example, "create_inference_client", lambda client: ReadyInference())
     monkeypatch.setattr(example.SecurityRuntime, "from_environment", lambda client: runtime)
     with pytest.raises(SecurityError, match="startup_failed"):
         await start_security()

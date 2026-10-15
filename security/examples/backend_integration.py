@@ -7,7 +7,7 @@ verified backend identity, and stop_security in the same event loop at shutdown.
 
 import httpx
 
-from security.adapters import OllamaClient
+from security.adapters import create_inference_client
 from security.deployment import SecurityRuntime
 
 
@@ -15,7 +15,7 @@ async def start_security() -> tuple[SecurityRuntime, httpx.AsyncClient]:
     http = httpx.AsyncClient()
     runtime = None
     try:
-        runtime = SecurityRuntime.from_environment(OllamaClient(http))
+        runtime = SecurityRuntime.from_environment(create_inference_client(http))
         await runtime.start()
         return runtime, http
     except BaseException:

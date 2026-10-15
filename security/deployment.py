@@ -34,6 +34,11 @@ class RuntimeHealth:
     classifiers: tuple[str, ...]
     ollama_preflight_passed: bool
 
+    @property
+    def provider_preflight_passed(self) -> bool:
+        """Provider-neutral alias; retain the legacy field for existing callers."""
+        return self.ollama_preflight_passed
+
 
 class SecurityRuntime:
     """Own startup, context minting, model reuse and draining for one event loop.

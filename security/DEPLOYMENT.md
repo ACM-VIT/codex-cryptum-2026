@@ -1,59 +1,110 @@
 # Level 7/8 classifier deployment plan
 
-## Decision and ownership
+## Current Next.js deployment
 
-The application backend now uses **Next.js**. This PR delivers Akhand's Python
-Level 7/8 guardrail component; it does not implement Next.js routes, authentication,
-scoring, persistence, or a production HTTP service.
-
-The deployment plan is a **private Python security worker alongside Next.js**.
-Within that worker, create one `SecurityRuntime` per process, not per request. It
-owns one CPU DeBERTa input engine shared by Levels 7 and 8, plus a separate CPU NLI
-output engine for Level 8. The injected `OllamaClient` talks independently to local
-or remote Qwen3-8B. No model training or weight changes are required.
-
-| Boundary | Status and ownership |
-| --- | --- |
-| Classifiers in-process inside the Python security worker | Implemented and tested in this package; one managed runtime per process |
-| Python classifiers directly inside a Next.js worker | Not the deployment plan; the Python ML runtime needs a separate process |
-| Private authenticated transport from Next.js to the Python worker | Integration dependency for backend/hosting; HTTP wrapper and Next.js wiring are not implemented here |
-| Separate input-model-only microservice | Unnecessary initially; the existing Python runtime owns the complete guardrail pipeline |
+The Python pretrained-classifier bridge is now implemented and called by the
+Next.js server for Levels 7 and 8. The main application still owns authentication,
+team identity, flag derivation, system prompts, LLM calls, persistence and scoring.
+No model weights or classifier thresholds have changed. The configured LLM may be
+OpenAI-compatible or Qwen/Ollama; it is independent of the CPU classifiers.
 
 ```mermaid
 flowchart LR
-    P[Participant] --> B[Next.js backend: authentication]
-    B -.->|Private authenticated transport: integration dependency| T
-    subgraph W[Python security worker]
-        T[HTTP wrapper: not implemented]
-        R[SecurityRuntime: mint trusted context]
-        I[Shared CPU DeBERTa input classifier]
-        IP[Input policy: L7 or L8 threshold]
-        C[Injected Ollama client]
-        O[CPU NLI output classifier: Level 8]
-        OP[Output policy]
-        T -.-> R
-        R --> I --> IP
-        IP -->|allowed, trusted system/user roles| C
-        C -->|buffered Level 8 response| O --> OP
-        C -->|buffered Level 7 response| T
-        OP -->|allowed response| T
-    end
-    C <--> Q[Qwen3-8B on local or remote Ollama]
-    T -.->|Sanitized result| B
+    P[Participant] --> B[Next.js: authenticate team]
+    B --> I[Private Python input classifier and policy]
+    I -->|allowed boolean| B
+    B --> M[Configured LLM provider]
+    M --> F[Next.js: final answer only]
+    F -->|Level 8| O[Private Python output classifier and policy]
+    O -->|allowed boolean| B
+    F -->|Level 7| B
     B --> P
 ```
 
-Solid internal pipeline stages are implemented. The dashed transport boundary is
-planned, not tested or deployed. The backend/hosting integration must authenticate
-the server-to-server caller and bind team identity to the backend's authenticated
-principal; it must not trust participant-supplied team IDs. Next.js must never fall
-back to a direct unguarded Qwen call when the worker is unavailable.
+`security.classifier_service` runs in its own Python process, loads the unchanged
+pinned CPU input and output models at startup, and shares its input engine across
+Levels 7 and 8. `apps/web/src/server/ml-classifiers.ts` authenticates private calls
+with a server-only bearer token. The model service returns **only `{allowed: bool}`**;
+Next.js never forwards classifier internals to participants. The service accepts
+only known routes and bounded JSON. It has at most eight transport threads; model
+runners retain their single admission slot and fail closed on busy/error/timeout.
 
-Blocked inputs stop before Qwen. Blocked Level 8 outputs are replaced with the fixed
-refusal before participant delivery. Errors fail closed. The complete output is
-buffered; no unchecked tokens stream to participants. All master secrets and flag
-context remain server-side. The integration team must keep the Python transport
-private and preserve these guarantees at the application boundary.
+| Internal endpoint | Request | Result |
+| --- | --- | --- |
+| `GET /health` | Bearer authorization | `{ready: bool}`; 503 when not ready |
+| `POST /classify-input` | `{challenge_id: 7 or 8, message: string}` | `{allowed: bool}` |
+| `POST /classify-output` | `{challenge_id: 8, response: string, protected_flag: string}` | `{allowed: bool}` |
+
+These endpoints are **not participant routes**. Defaults bind to `127.0.0.1:8091`.
+Keep the service local or behind a private authenticated HTTPS proxy; this package
+does not configure production TLS, public ingress, service orchestration or replicas.
+The Next.js client permits HTTP only to loopback hosts, rejects endpoint credentials/
+query/fragment, disables redirects/cache, bounds response size, and times out after
+35 seconds. Failure returns a sanitized 503; there is no generative-judge/mock fallback.
+
+The output request contains only the current team's flag, derived by the authenticated
+backend's existing `flagFor`. The service validates flag syntax and creates an ephemeral
+trusted request context, but never derives, persists, returns or logs a flag. The
+master `FLAG_SECRET` remains with Next.js. Participant JSON cannot choose a flag or
+trusted team identity. The native Python `FlagService` uses its own documented
+scheme; **do not substitute its derivation for Next.js scoring**.
+
+### Start the complete local application
+
+Install Node/pnpm and Python dependencies using the root README and the portable
+commands below. Keep application settings in root `.env`. Copy `security/.env.example`
+to private `security/.env`; configure one random >=32-byte `CRYPTUM_CLASSIFIER_TOKEN`
+identically in both files. Use your secret manager; do not commit it or rotate it on
+restart. The root `.env.example` documents `CRYPTUM_CLASSIFIER_URL` and the token.
+The Python service needs no database, LLM API key, flag master key, or production flag.
+
+```text
+pnpm install --frozen-lockfile
+uv sync --locked --python 3.12 --extra ml --extra dev --extra openai
+uv run --no-sync python -m security.deploy prepare --env-file security/.env --timeout 600
+pnpm db:migrate
+pnpm db:seed
+```
+
+Run in separate terminals, using the intended development database only:
+
+```text
+uv run --no-sync python -m security.classifier_service --env-file security/.env
+pnpm dev
+```
+
+After caching, set `HF_HUB_OFFLINE=1` in `security/.env`. Open the URL matching
+`BETTER_AUTH_URL` exactly, normally **http://localhost:3000**. Visiting `127.0.0.1`
+while that variable says `localhost` causes mutation requests to fail the existing
+same-origin checks. Restart Next.js after adding server environment settings.
+
+For a production build, use `pnpm build` then `pnpm start`, while running the Python
+bridge as a separately supervised private process. Hosting owns process supervision,
+HTTPS, secrets and admission capacity. Team creation/account UI exists on the
+unmerged `team-creation` branch; it must be approved/integrated before claiming
+registration works in this checkout. Real Google OAuth needs interactive account
+verification and correct registered callbacks. See [../CTF_TEST_REPORT.md](../CTF_TEST_REPORT.md)
+for tested and unverified paths.
+
+### Thinking-mode boundary
+
+The native Ollama adapter sends `stream=false` and `think=false`, discards separate
+thinking fields, and its pipeline rejects inline reasoning markers. The Next.js
+OpenAI-compatible provider buffers the response, drops separate SDK reasoning, keeps
+only text after a closing thinking block, and fails closed for unterminated reasoning
+or unexpected SSE/NDJSON. Its Qwen3-only soft `/no_think` control is not applied to
+OpenAI models. It is a request hint, not a guarantee of confidentiality or of no
+internal reasoning. Classifiers inspect participant input and deliverable final text;
+unreturned reasoning is discarded before output classification. Real observations
+and source references are in the test report.
+
+## Native Python lifecycle API (alternative integration)
+
+The remaining sections document `SecurityRuntime`, the optional native Python
+orchestration interface. **It is not the path used by the Next.js classifier bridge.**
+It still supports direct Python backends and injected Ollama or OpenAI clients, with its own
+flag/context authority. The bridge above was added during full-application QA to
+connect the existing Next.js flow without replacing its scoring or other levels.
 
 ## Exact models and preserved behavior
 
@@ -193,8 +244,9 @@ config) -> InferenceResponse` plus `check_available(model) -> None` for startup
 preflight. Discard reasoning/provider metadata and return only buffered participant
 content. Existing `InferenceClient`/`SecurityPipeline` interfaces are unchanged.
 Application-owned HTTP clients may supply private proxy authentication headers.
-Keep credentials out of endpoint URLs. The current bundled adapter remains Ollama;
-backend `LLM_*` variables do not select an OpenAI-compatible adapter in this package.
+Keep credentials out of endpoint URLs. Bundled `OllamaClient` and official-SDK
+`OpenAIClient` implement the same interface. `create_inference_client(http)` chooses
+the provider from `LLM_PROVIDER`; see the provider deployment section below.
 
 ## Reproducible fresh-host setup
 
@@ -235,7 +287,7 @@ Use `.bootstrap/bin/uv` in place of `uv` below if uv is not otherwise installed.
 Apple Silicon uses native PyPI CPU execution. Development/CI tools are optional:
 
 ```text
-uv sync --locked --python 3.12 --extra ml --extra dev
+uv sync --locked --python 3.12 --extra ml --extra dev --extra openai
 ```
 
 ### Trusted environment and cache
@@ -327,7 +379,7 @@ uv run --no-sync python -m security.deploy check --env-file security/.env --offl
 ```
 
 Success: exit 0 and JSON with `health.ready=true`, classifier states `ready`, and
-`ollama_preflight_passed=true`; only safe timing/resource metadata is included.
+`provider_preflight_passed=true`; only safe timing/resource metadata is included.
 Failure: exit 2 with a fixed `SecurityError` code, never an upstream exception or
 flag. This command **exits after closing its models**. It is a deployment preflight,
 not a server and not a persistent warm-up for another process. The future Python
@@ -337,10 +389,8 @@ explicit `.env` in backend code, call `load_environment_file(Path('security/.env
 `security.runtime` before constructing the runtime. Do that before importing ML
 libraries; HF offline/cache variables are read by those libraries during import.
 
-No Docker deployment is added: the component has no standalone serving process to
-containerize; the uv lock and startup contract provide the initial reproducible
-unit. The hosting/backend team can package this component with its Python transport
-wrapper later.
+Docker remains optional and no container orchestration is added. The classifier
+bridge is a standalone private process; hosting can package it using the uv lock.
 
 ## Capacity, scaling and troubleshooting
 
@@ -370,7 +420,8 @@ sizes, strict score/type validation, transport deadline and sanitized fail-close
 errors. The security pipeline should still apply its own policy. Never let participant
 requests choose the service URL. Input screening needs participant text only; it does
 not need any flag. Remote output classification would require a separately reviewed
-trusted context/secret-handling contract. No such services/adapters exist yet.
+trusted context/secret-handling contract. The current Next.js bridge contract is
+documented above; a remote adapter for the native Python runtime is not supplied.
 
 ## Validation evidence and remaining integration work
 
@@ -399,9 +450,10 @@ six Linux/macOS jobs, but did not run real model weights on macOS.
 
 Implemented: in-process lifecycle, warm-up, shared input weights, safe health snapshot,
 bounded classifier workers, context-minting backend contract, flag verifier, preflight
-CLI, deployment tests and setup documentation. Awaiting backend/hosting integration:
-private authenticated Python transport wrapper, Next.js wiring, request/response DTO
-validation, readiness endpoint, bounded admission, secret injection and lifecycle hooks.
+CLI, deployment tests and setup documentation. The current web deployment also has
+the private classifier transport, Next.js client, DTO validation and readiness route
+described above. Hosting must still provide supervision, bounded public admission,
+secret injection and lifecycle integration.
 Jiya owns backend authentication, scoring and persistence. Awaiting hosting: Qwen
 endpoint, runtime availability, production supervision, resource sizing and remote
 network controls. Awaiting organizers: final deployment worker count/host and event
@@ -442,15 +494,63 @@ other host activity, not classifier VRAM. Classifier parameters were asserted on
 No throughput, production load, fresh online download or remote Qwen benchmark was
 performed. Offline preparation reused existing artifacts without redownloading them.
 
-### Proposed PR discussion reply (not posted)
+### Integration status
 
-> My deliverable is the Python Level 7/8 guardrail component. With Next.js now owning
-> the backend, the deployment plan is a private Python security worker called through
-> authenticated server-to-server transport. Inside that worker, SecurityRuntime loads
-> the pinned DeBERTa classifier once on CPU and shares it across Levels 7 and 8; Qwen
-> remains independent through Ollama. Startup warm-up, health metadata, fail-closed
-> errors, team context isolation and shutdown are implemented. The local suite passed
-> 254 tests, including 12 real integration cases. DEPLOYMENT.md documents the Python
-> setup and integration contract. The private HTTP wrapper and Next.js wiring remain
-> backend/hosting integration dependencies; this PR does not implement or claim that
-> transport is deployed. Weights, thresholds, prompts and flag verification are unchanged.
+The Python classifier HTTP bridge and Next.js server-only client are implemented and
+were tested together against the real cached classifiers and configured OpenAI model.
+The earlier native-Python example remains supported. Team creation and Level 3/9
+feature branches are not merged by this work. Production hosting, genuine Google
+OAuth and challenge solvability approval remain external requirements. No commit,
+push, merge or deployment was performed during this QA follow-up.
+
+## Native Python OpenAI deployment
+
+The alternative native Python `SecurityRuntime` can now use either bundled provider.
+This does not reroute the Next.js application's existing `LLM_*` integration, change
+its flags, or move authentication into Python. The current Next.js flow above keeps
+using its private pretrained-classifier bridge. For native Python deployments:
+
+1. Install `uv sync --locked --python 3.12 --extra ml --extra dev --extra openai`.
+2. Copy `security/.env.example` to `security/.env`. Supply the existing native-runtime
+   trusted flag/master configuration. Select `LLM_PROVIDER=openai`, set an explicit
+   `OPENAI_MODEL` and server-side `OPENAI_API_KEY`. Keep this file private.
+3. Prepare cached weights using `python -m security.deploy prepare` under the uv
+   environment, then run the check below. Model weights/revisions are unchanged.
+4. Start the existing host integration once per worker using
+   `security.examples.backend_integration.start_security()`. Its factory selects the
+   provider before runtime startup. Drain with `stop_security()` on shutdown.
+
+```text
+uv run --no-sync python -m security.deploy prepare --env-file security/.env --timeout 600
+uv run --no-sync python -m security.deploy check --env-file security/.env --offline
+uv run --no-sync python -m security --provider openai --env-file security/.env
+```
+
+For Ollama, select `LLM_PROVIDER=ollama` instead, retain `OLLAMA_MODEL=qwen3:8b`, and
+set `OLLAMA_URL` to the local or trusted remote server. The same `check` command and
+backend interface work; `--provider ollama` runs the live demo. No OpenAI key or SDK
+is required for Ollama-only deployments.
+
+The SDK is pinned at 2.29.0 for the existing HTTPX transport. Only one selected
+client is constructed and reused. Its transport belongs to the host and closes after
+the security runtime drains. Startup validates credentials/model/settings and probes
+the provider's models endpoint. Failed preflight leaves readiness false; unavailable
+providers never trigger a fallback. `RuntimeHealth.provider_preflight_passed` is the
+provider-neutral alias; `ollama_preflight_passed` remains for backwards compatibility
+and now represents the selected provider's preflight. `security.deploy check` prints
+both names without any protected context.
+
+OpenAI operation timeout defaults to 60 seconds, capped by the existing challenge
+request deadline. SDK retries default to one and are limited to at most two; they
+remain inside the deadline. See [provider parameters](README.md#provider-parameters-and-failure-behavior)
+for model-specific token and reasoning settings. Missing SDK, invalid settings,
+model access failures, exhausted rate limits/timeouts, malformed responses and
+unexpected streams fail closed with fixed codes. Do not enable SDK debug logs.
+Remote OpenAI-compatible bases require HTTPS. Proxies must implement nonstreamed
+Chat Completions and model retrieval; support for arbitrary providers is not claimed.
+
+Level 7 still screens input with the pinned CPU DeBERTa; Level 8 adds the unchanged
+output classifier before delivery. The exact same system/context builder runs for
+both LLM providers. Qwen-specific controls stay in Ollama, and OpenAI exposes only
+assistant final content. Model weights, flag derivation and thresholds are unchanged.
+See [../CTF_TEST_REPORT.md](../CTF_TEST_REPORT.md) for actual validation evidence.

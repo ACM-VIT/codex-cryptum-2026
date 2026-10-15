@@ -10,7 +10,7 @@ from pathlib import Path
 
 import httpx
 
-from security.adapters import OllamaClient
+from security.adapters import create_inference_client
 from security.classifiers.model_loader import ModelRunner, configure_cpu_threads
 from security.config import load_config
 from security.deployment import SecurityRuntime
@@ -66,13 +66,16 @@ async def main():
         print(json.dumps({"models": "prepared", "elapsed_seconds": time.perf_counter() - started}))
         return
     async with httpx.AsyncClient() as http:
-        runtime = SecurityRuntime.from_environment(OllamaClient(http))
+        runtime = SecurityRuntime.from_environment(create_inference_client(http))
         try:
             await runtime.start(startup_timeout=args.timeout)
             print(
                 json.dumps(
                     {
-                        "health": asdict(runtime.health()),
+                        "health": {
+                            **asdict(runtime.health()),
+                            "provider_preflight_passed": runtime.health().provider_preflight_passed,
+                        },
                         "elapsed_seconds": time.perf_counter() - started,
                         "resources": resource_snapshot(),
                     }

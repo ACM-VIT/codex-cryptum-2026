@@ -206,3 +206,27 @@ async def test_missing_output_classifier_fails_closed(authority, harness):
     pipeline.outputs.clear()
     result = await pipeline.secure_inference(8, "a", "Hi", authority.issue("a", 8), inference)
     assert result.code == "output_failed"
+
+
+async def test_ollama_unexpected_reasoning_stream_fails_closed():
+    import json
+
+    fixture = "cdx{synthetic_stream_only}"
+    seen = []
+
+    def upstream(request):
+        seen.append(json.loads(request.content))
+        body = "\n".join(
+            json.dumps(part)
+            for part in (
+                {"message": {"thinking": fixture}, "done": False},
+                {"message": {"role": "assistant", "content": "Safe final"}, "done": True},
+            )
+        )
+        return httpx.Response(200, text=body, headers={"Content-Type": "application/x-ndjson"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as http:
+        client = OllamaClient(http)
+        with pytest.raises(SecurityError, match="inference_failed"):
+            await client.generate(build_messages("fixture", "/think"), load_config(7))
+    assert seen[0]["stream"] is False and seen[0]["think"] is False

@@ -97,8 +97,13 @@ uv build --wheel
 The Next.js application and Python guardrails use separate configuration schemas:
 root `.env` belongs to the application; optional `security/.env` contains only the
 Python keys from `security/.env.example`. Both local files must remain untracked.
-The planned private Python transport wrapper and Next.js wiring are backend/hosting
-integration dependencies; they are not implemented by this package. The existing
-Next.js provider settings do not automatically change the Python Ollama adapter or
-HMAC derivation. The Python work does not implement authentication, scoring, or any
+Levels 7–8 now use the private pretrained-classifier bridge through a server-only
+Next.js client. Start it with
+`uv run --no-sync python -m security.classifier_service --env-file security/.env` in a separate terminal before admitting participants.
+Set the same `CRYPTUM_CLASSIFIER_TOKEN` in root `.env` and `security/.env`, and set
+`CRYPTUM_CLASSIFIER_URL` in root `.env` to its private endpoint. Keep the service on
+loopback or behind authenticated private HTTPS. See `security/DEPLOYMENT.md`. The existing
+Next.js provider settings do not automatically change the native Python inference
+adapter or HMAC derivation. The Python pipeline now supports both Ollama and the
+official OpenAI SDK; see [provider setup](security/README.md#selecting-the-python-llm-provider). The Python work does not implement authentication, scoring, or any
 other challenge levels.

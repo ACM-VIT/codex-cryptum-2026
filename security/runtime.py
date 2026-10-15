@@ -12,6 +12,16 @@ from security.types import SecurityError
 
 ENVIRONMENT_KEYS = frozenset(
     {
+        "CRYPTUM_CLASSIFIER_URL",
+        "CRYPTUM_CLASSIFIER_TOKEN",
+        "LLM_PROVIDER",
+        "OPENAI_API_KEY",
+        "OPENAI_MODEL",
+        "OPENAI_BASE_URL",
+        "OPENAI_TIMEOUT_SECONDS",
+        "OPENAI_MAX_RETRIES",
+        "OPENAI_TOKEN_PARAMETER",
+        "OPENAI_REASONING_EFFORT",
         "OLLAMA_URL",
         "OLLAMA_MODEL",
         "HF_HOME",

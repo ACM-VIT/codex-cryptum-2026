@@ -1,10 +1,13 @@
 # Akhand's Level 7–8 security module
 
 Deployment and backend lifecycle instructions are in [DEPLOYMENT.md](DEPLOYMENT.md).
-The Python component loads its CPU classifiers in-process inside a Python security
-worker; Qwen remains an independent Ollama runtime. The application backend uses
-Next.js. A private HTTP wrapper and Next.js wiring are external integration
-dependencies and are not implemented by this package.
+The application uses Next.js. Levels 7–8 now call the private CPU pretrained-model
+bridge in `security.classifier_service`, through `apps/web/src/server/ml-classifiers.ts`.
+It shares one DeBERTa engine across both levels and keeps the output model independent.
+The configured LLM remains separate. Start the bridge with `python -m
+security.classifier_service --env-file security/.env`; see the deployment guide for
+private transport configuration and full launch commands. The native `SecurityRuntime`
+is an alternative Python integration, not the path used by the web bridge.
 
 This package implements Level 7 input classification, Level 8 input and output
 classification, team-specific flags, and the shared security layer around Qwen3-8B.
@@ -81,7 +84,7 @@ If uv is already installed, the setup is the same on Linux and Apple Silicon mac
 
 ```text
 uv python install 3.12
-uv sync --locked --python 3.12 --extra ml --extra dev
+uv sync --locked --python 3.12 --extra ml --extra dev --extra openai
 uv run --no-sync python -m security --mock-classifiers
 uv run --no-sync python -m pytest -q -m "not integration"
 ```
@@ -94,7 +97,7 @@ or bootstrap it into a virtual environment with an available Python 3 interprete
 python3 -m venv .bootstrap
 .bootstrap/bin/python -m pip install uv
 .bootstrap/bin/uv python install 3.12
-.bootstrap/bin/uv sync --locked --python 3.12 --extra ml --extra dev
+.bootstrap/bin/uv sync --locked --python 3.12 --extra ml --extra dev --extra openai
 ```
 
 If the distribution separates venv tooling, install it first: Ubuntu/Debian commonly
@@ -123,9 +126,9 @@ uv run --no-sync python -m security --mock-classifiers
 prebuilt torch wheels.** PyTorch ended macOS x86_64 wheel support after 2.2.x; the
 project retains 2.9.1 and does not silently downgrade. A compatible same-version
 source build or a backend with injected trusted classifiers running on a supported
-machine is needed for real protected execution. This package does not implement a
-classifier server. With missing ML dependencies, real classifier execution fails
-closed; the mock demo is explicitly labeled and cannot be combined with Ollama.
+machine is needed for real protected execution. The private classifier bridge can run on a supported Linux or Apple Silicon
+host; the Next.js client can use its private HTTPS endpoint. With missing ML dependencies, real classifier execution fails
+closed; the mock demo is explicitly labeled and cannot be combined with live inference.
 
 A supported Python already installed on Linux or Apple Silicon can use pip:
 
@@ -155,7 +158,7 @@ uv run --no-sync python -m security.deploy check --env-file security/.env --offl
 ```
 
 Preparation needs only cache/model settings; the check requires valid trusted Level 7
-and Level 8 configuration and reachable Ollama. `--offline` forbids Hub downloads.
+and Level 8 configuration and the selected reachable inference provider. `--offline` forbids Hub downloads.
 Set `HF_HUB_OFFLINE=1` in the trusted backend environment after preparation. The
 check exits after closing its models; the backend must warm its own worker during
 startup. Neither command starts an HTTP server. See [DEPLOYMENT.md](DEPLOYMENT.md).
@@ -171,8 +174,9 @@ files without printing their contents.
 Never commit the master key or real flags.
 
 The Next.js root `.env` and the Python guardrail `security/.env` have separate schemas.
-The strict Python loader rejects backend-only database/auth/`LLM_*` variables. It does
-not automatically map `FLAG_SECRET` to the HMAC master key or change the Ollama client.
+The strict Python loader accepts `LLM_PROVIDER` but rejects backend-only database/auth
+and `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` variables. Python uses explicit `OPENAI_*`
+or `OLLAMA_*` settings. It never maps `FLAG_SECRET` to the Python HMAC master key.
 Agree flag derivation and key ownership with the backend team during integration.
 
 | Variable | Purpose |
@@ -312,8 +316,8 @@ history retrieval, conversation judging, and other levels remain outside this mo
 
 Use the managed lifecycle once per Python security worker. Its handler accepts no
 trusted context or inference settings from a participant. Jiya's Next.js backend
-owns authentication and application routes. A private Python transport wrapper and
-Next.js wiring are external integration dependencies; neither is implemented here.
+owns authentication and application routes. The private classifier bridge is implemented for the web flow. The helpers below
+illustrate an alternative native Python integration, not Next.js routes.
 See the executable Python-side integration helpers in
 [examples/backend_integration.py](examples/backend_integration.py).
 
@@ -340,7 +344,7 @@ await stop_security(runtime, http)
 ```
 
 `SecurityRuntime.start()` validates secrets, eagerly warms the two pinned CPU models,
-then preflights Ollama. `health()` supplies private safe readiness metadata;
+then preflights the selected inference provider. `health()` supplies private safe readiness metadata;
 `handle()` creates the trusted team/challenge context internally and calls the
 existing pipeline. `aclose()` stops admission, drains requests and joins owned
 model workers before the backend closes its HTTP client. Required model/runtime
@@ -352,17 +356,17 @@ available. Legacy pipeline construction is lazy and process-cached; deploy using
 managed runtime per worker rather than mixing model ownership paths. The backend's
 existing inference client can implement `generate(messages, config) -> InferenceResponse`;
 the managed runtime also requires `check_available(model) -> None` for startup
-preflight. The bundled `OllamaClient` implements both, with local/remote environment
-configuration. No participant-facing proxy or flag-generation endpoint exists.
+preflight. Both bundled adapters implement these methods, with explicit trusted
+provider/model configuration. No participant-facing proxy or flag-generation endpoint exists.
 
 The runtime's Level 8 validator uses the same authority, key and rotation as prompt
 construction. The backend owns authenticated flag submission and scoring. Low-level
 `FlagService.derive_team_flag/validate_team_flag`, `load_config`, the async classifier
 protocols, typed policy decisions and prompt construction retain their interfaces.
-The future private HTTP wrapper should invoke the complete Python pipeline so
-Next.js cannot accidentally skip required guardrails. The example contains no HTTP
-listener or authentication implementation. Independent classifier hosting can use
-the existing protocols later if needed.
+The web flow uses the independent private HTTP classifier service around its
+existing provider, prompt and scoring operations. It sends only authenticated
+server-owned context, with mandatory Level 7/8 checks and sanitized failure behavior.
+The native Python example itself contains no HTTP listener or authentication logic.
 
 ## Failure behavior and concurrency
 
@@ -480,3 +484,123 @@ blocked by default on Level 8. If evaluation finds no delivered flag, report tha
 result and investigate candidate attacks; do not silently disable enforcement or
 weaken the configuration. Backend authentication, confidential logging practices,
 and trusted handling of the inference endpoint are required integration dependencies.
+
+## Selecting the Python LLM provider
+
+The native Python pipeline supports Ollama and the **official OpenAI Python SDK
+2.29.0**. Install the optional SDK without changing the classifier runtime:
+
+```text
+uv sync --locked --python 3.12 --extra ml --extra dev --extra openai
+```
+
+Alternatively, in an existing supported venv, install `.[openai]` with pip. The
+version is pinned in `pyproject.toml` and `uv.lock` and uses the existing HTTPX
+0.28.1 transport. Ollama and mock-only demos do not require the SDK extra.
+
+Copy `security/.env.example` to private `security/.env` and edit it using an editor.
+No shell activation or shell-specific environment assignment is required.
+
+For OpenAI, set `LLM_PROVIDER=openai`, provide `OPENAI_API_KEY` through server-side
+secrets, and set **your own** `OPENAI_MODEL`. There is no default OpenAI model.
+`OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`; custom remote endpoints
+require HTTPS, while HTTP is permitted for loopback test endpoints only. The key
+must never be browser-visible or included in participant requests. Do not enable
+SDK/HTTP debug logging in protected workers because it can record request bodies.
+
+For Ollama, set `LLM_PROVIDER=ollama`, `OLLAMA_URL=http://localhost:11434`, and
+`OLLAMA_MODEL=qwen3:8b`. A trusted remote Ollama URL is supported. Ollama remains the
+default when `LLM_PROVIDER` is absent. There is **no provider fallback** on failure.
+
+Run Levels 7 and 8 locally with real classifiers and synthetic development contexts:
+
+```text
+uv run --no-sync python -m security --provider openai --env-file security/.env
+uv run --no-sync python -m security --provider ollama --env-file security/.env
+```
+
+These are CLI demos, not new participant routes. They print status and organizer-only
+classification metadata, never raw protected model responses. The original `--ollama`
+shortcut remains supported. Without either live-provider option, inference is explicitly
+mocked. `--mock-classifiers` cannot be combined with live inference.
+
+`create_inference_client(http)` selects one long-lived client from trusted environment.
+It implements the same `generate(messages, config) -> InferenceResponse` and startup
+`check_available(model)` methods. `load_config` resolves `OPENAI_MODEL` only for OpenAI
+and `OLLAMA_MODEL` only for Ollama; YAML thresholds, prompts and flag policies stay
+unchanged. Direct `OllamaClient(http, url)` injection remains supported. For OpenAI,
+the configured challenge model and client model must match.
+
+```python
+import httpx
+from security.adapters import create_inference_client
+from security.deployment import SecurityRuntime
+
+async def run_request(authenticated_team_id: str, level: int, message: str):
+    # Example lifecycle only: real hosts start one runtime per worker, not per request.
+    async with httpx.AsyncClient() as http:
+        runtime = SecurityRuntime.from_environment(create_inference_client(http))
+        try:
+            await runtime.start()
+            return await runtime.handle(level, authenticated_team_id, message)
+        finally:
+            await runtime.aclose()
+```
+
+Use `security.examples.backend_integration.start_security`, `participant_message`
+and `stop_security` for reusable worker lifecycle. The host owns the HTTP client,
+closes it after draining the runtime, and supplies the authenticated identity. Native
+runtime startup retains its existing required trusted flag/master settings. The
+classifier-only web bridge needs neither those settings nor an OpenAI key.
+
+### Provider parameters and failure behavior
+
+| Setting | Scope / behavior |
+| --- | --- |
+| `LLM_PROVIDER` | Exact `ollama` or `openai`; unknown values fail at startup |
+| `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` | OpenAI only; key/model required, endpoint validated |
+| `OPENAI_TIMEOUT_SECONDS` | OpenAI operation deadline, default 60, range >0–600 seconds |
+| `OPENAI_MAX_RETRIES` | SDK retries, default 1, range 0–2; deadline caps total retry time |
+| `OPENAI_TOKEN_PARAMETER` | Default `max_completion_tokens`; explicitly select `max_tokens` for compatible legacy models |
+| `OPENAI_REASONING_EFFORT` | Optional; omitted unless explicitly configured for a supporting model |
+| `OLLAMA_URL`, `OLLAMA_MODEL` | Ollama only; native `/api/chat`, `think=false`, nonstreamed |
+
+The effective OpenAI request deadline is the smaller of the provider timeout and
+existing challenge inference timeout. Retries cover the SDK's transient errors;
+rate limits, timeout exhaustion, HTTP/API failures, empty/structured/tool responses
+and unexpected streams return fixed errors. No upstream exception body is returned.
+Startup verifies model access using the provider's models endpoint without generating
+text. A compatible proxy that lacks this endpoint cannot pass native runtime preflight.
+
+OpenAI requests contain the same trusted system/user roles and buffered final text.
+They omit temperature and reasoning options by default because model support differs;
+there are no guessed model capabilities or automatic parameter retries. Ollama keeps
+its existing temperature/context options. Unsupported OpenAI models/settings fail
+closed and require explicit organizer configuration. Some reasoning models can consume
+the token budget without a final answer, which is treated as an inference failure.
+
+Qwen `/think` and `/no_think` are never added to OpenAI prompts. Separate reasoning
+fields, annotations and SDK metadata are discarded. Inline reasoning markers are
+rejected by the existing pipeline. Level 8 classifies the **complete final text**
+before returning it; neither adapter streams participant-visible tokens.
+
+### Provider testing
+
+```text
+uv run --no-sync python -m pytest -q security/tests/test_openai_provider.py
+uv run --no-sync python -m pytest -q -m "not integration"
+```
+
+The first command uses the real SDK with mocked HTTP and simulated classifier
+responses. It makes no API calls. To opt into billable real OpenAI smoke and real
+pretrained-classifier tests after configuring the explicit Python environment file:
+
+```text
+uv run --no-sync python -c "import os, pytest; from pathlib import Path; from security.runtime import load_environment_file; load_environment_file(Path('security/.env')); os.environ['CRYPTUM_RUN_OPENAI_INTEGRATION']='1'; os.environ['HF_HUB_OFFLINE']='1'; raise SystemExit(pytest.main(['-q', 'security/tests/test_openai_integration.py']))"
+```
+
+This makes three short generation calls using synthetic flags and cached CPU weights.
+For existing real Ollama tests, select Ollama and use the separate
+`CRYPTUM_RUN_REAL_INTEGRATION=1` opt-in documented above. Never point synthetic tests
+at a production participant database. OpenAI model choice can affect refusal behavior
+and CTF solvability; no model-equivalence or solved-challenge claim is made.

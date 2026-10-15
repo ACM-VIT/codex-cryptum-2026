@@ -1,5 +1,8 @@
 # Defensive security QA report
 
+The original QA record below is retained. See the [current provider and application
+QA follow-up](#openai-provider-and-application-qa-follow-up) for the latest results.
+
 Validation date: **2026-10-15, Asia/Kolkata**. The resource/evaluation run was recorded
 from `2026-10-14T19:43:42.889007+00:00` to `2026-10-14T19:44:33.815835+00:00`
 (01:13–01:14 IST on October 15).
@@ -392,3 +395,188 @@ git diff --check
 The default local validation report path is gitignored. The checked-in JSON evidence
 is explicitly selected for this run and contains only development sample text,
 sample IDs/scores, timings, synthetic team labels, and safe verification metadata.
+
+---
+
+## OpenAI provider and application QA follow-up
+
+Date: 2026-10-15. Branch: `llm-guardrails`. All changes remain local.
+No model training, weight changes, threshold changes, flag derivation changes, or
+new team-flag requirements were introduced by the OpenAI provider work.
+
+### Environment and evidence
+
+Arch Linux x86_64, managed Python 3.12.14, HTTPX 0.28.1, official OpenAI SDK 2.29.0.
+Local Ollama was available with `qwen3:8b`. Supplied API configuration used
+`https://api.openai.com/v1` and `gpt-6-luna`. Keys and flag values are omitted.
+The existing root `LLM_*` credentials were mapped into `OPENAI_*` in a test child
+process only; no runtime alias, fallback, or credential copy into source was added.
+The smoke explicitly selected the previously verified `reasoning_effort=none` for
+that model; the adapter itself has no model name or reasoning-effort default.
+
+Input model: `protectai/deberta-v3-base-prompt-injection-v2`, revision
+`90c9989b1a342275dd0d1a95aad283c04e075671`.
+Output model: `cross-encoder/nli-MiniLM2-L6-H768`, revision
+`b95119ce93d3e065de6214e38cd4a97b0f2f2c6d`.
+Both ran actual pretrained weights on CPU. The output strategy is zero-shot NLI,
+not a classifier pretrained specifically for secret disclosure.
+
+### Automated tests
+
+| Test group | Actual result | What was real |
+| --- | --- | --- |
+| Final unit/mock selection, `pytest -q -m "not integration"` | **317 passed**, 15 deselected, 12.08 s | Python/SDK/parser/policy/loopback HTTP; ML and external providers simulated |
+| Full run before the final two additional regression cases | **327 passed, 3 skipped**, 32.54 s | Includes 12 opt-in real cached-classifier/local-Ollama cases; three OpenAI cases skipped |
+| Explicit OpenAI integration selection | **3 passed**, 10.36 s | Official SDK, real model lookup and three short generation requests; real CPU classifiers in Levels 7 and 8 |
+| JavaScript suites after QA changes | **124 passed**, 7 database cases skipped in this selection | 4 catalog + 120 web tests; external model responses mocked |
+| Main-branch database integration, earlier retained result | **7 passed** | Isolated local PostgreSQL and actual route/database behavior; OAuth principal mocked |
+| Ruff lint, format check, wheel build | PASS | Local source and package build |
+| Next.js lint, typecheck, production build | PASS | Actual local build/toolchain |
+| Linux/macOS CI matrix | NOT TESTED in this follow-up | Matrix updated to install SDK extra; no remote CI run claimed |
+
+The two final added cases are missing optional SDK fail-closed behavior and native
+OpenAI runtime startup/request/shutdown with simulated ML and SDK HTTP transport.
+Together, the selections validate **317 unit/mock + 12 real classifier/Ollama + 3
+real OpenAI = 332 distinct tests**. Counts from overlapping runs must not be added.
+Two upstream SentencePiece/SWIG deprecation warnings occurred during real ML runs.
+
+New provider coverage includes selection/defaults, missing key/model/dependency,
+invalid URL/deadline/retries, official SDK request shape, separate reasoning fields,
+legacy token arguments, configured reasoning effort, rate limits, exhausted retries,
+timeouts, connection errors, recovery, empty/structured/tool responses, unexpected
+streams, model mismatch, role escalation, sanitized errors, both levels with both
+providers, blocked-input no-call behavior, blocked-output nondelivery, trusted team
+context isolation, startup health, reuse and transport ownership.
+
+An initial test assertion expected `allowed` instead of the established success
+code `ok`; it was corrected. A new test initially leaked environment variables into
+later Ollama tests; teardown was fixed. Neither required weakening runtime behavior.
+
+### Level 7
+
+The actual input classifier loads, shares its engine across Levels 7 and 8, and
+executes before inference. Policy threshold remains **0.75**. Mocked integration
+asserts blocked inputs never reach either provider. Real OpenAI and local Ollama
+benign requests passed with actual classifiers and synthetic protected contexts.
+Missing/invalid input, invalid roles/context, startup failures and timeouts remain
+fail closed. The same trusted prompt builder is used for both providers.
+
+### Level 8
+
+Input threshold remains **0.80**, output threshold **0.75**. The same input engine
+is reused; the separate output model inspects the complete buffered final answer.
+Real OpenAI and Ollama benign requests passed. Unsafe output blocking is established
+with real-classifier controlled output fixtures and mock-provider contract tests;
+it is not claimed as a reproduced real-model extraction attack.
+
+Existing HMAC flags remain unchanged. Synthetic teams alpha/beta/gamma were checked
+for stable distinct flags, cross-team rejection, context tamper/reuse rejection,
+challenge separation, and current-team-only protected prompt construction. Provider
+switching never supplies a participant-controlled team identity or trusted flag.
+The web bridge continues to use the authenticated Next.js backend's existing flag
+scheme, independently of the alternative native Python runtime's flag scheme.
+
+### Classifier evaluation
+
+Fresh evaluation used the existing labeled development/evaluation dataset, real CPU
+weights and no training. Each held-out split has 24 examples; output variants share
+templates and are not independent datasets. No scores are calibrated probabilities.
+
+| Held-out component | Accuracy | Precision | Recall | F1 | FPR | FNR | TN / FP / FN / TP |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Input, Level 7 at 0.75 | 100% | 100% | 100% | 1.000 | 0% | 0% | 12 / 0 / 0 / 12 |
+| Input, Level 8 at 0.80 | 100% | 100% | 100% | 1.000 | 0% | 0% | 12 / 0 / 0 / 12 |
+| Output ML only at 0.75 | 62.5% | 100% | 25% | 0.400 | 0% | 75% | 12 / 0 / 9 / 3 |
+| Output ML + supplementation at 0.75 | 83.3% | 90% | 75% | 0.818 | 8.3% | 25% | 11 / 1 / 3 / 9 |
+
+Output metrics matched for the reference and derived synthetic-flag variants.
+At thresholds 0.65, 0.70, 0.75, 0.80 and 0.85, held-out input decisions stayed the
+same, and supplemented output decisions also stayed the same. Defaults were retained.
+This tiny sample does not validate real-world accuracy or event difficulty.
+
+Known output ML false negatives include bare/transformed flags and partial
+information. Supplemented false negatives are fixture IDs `output-1-07`,
+`output-1-08`, `output-1-10` (prefix, suffix and instruction disclosure). The public
+example-flag fixture `output-0-08` is a supplementary pattern false positive.
+A separate private-bridge real test allowed a direct hidden-flag request and a
+slash-separated output fixture; these are known detection limitations, not proof
+of a successful end-to-end solution.
+
+| Warmed CPU inference | Mean | p95 |
+| --- | ---: | ---: |
+| Input held-out set | 197.18 ms | 302.25 ms |
+| Output, reference fixture | 165.82 ms | 187.28 ms |
+| Output, derived fixture | 190.21 ms | 270.66 ms |
+
+Combined model warm-up in this evaluation took 3.09 seconds. This is not an isolated
+cold-download or per-model initialization benchmark. The running classifier model
+process RSS snapshot was 1,044,639,744 bytes (~996 MiB). Host-wide GPU use was 6074
+of 8188 MiB while other workloads/Ollama were resident; this is not classifier GPU
+usage. Both classifier models' parameters were verified on CPU. No throughput or
+production capacity guarantee is made.
+
+### Thinking, streaming and secret exposure
+
+Earlier safe local thinking tests found synthetic secret text in **raw Qwen's
+separate thinking field** when native thinking was left at its default. It was
+absent from the corresponding final answers. User `/no_think` did not suppress
+that field in this installed runtime. Native `think=false` suppressed it even with
+user `/think`. These are model-side observations, not a delivered Level 7/8 leak.
+Qwen's soft commands depend on its chat template/runtime; see the
+[Qwen model card](https://huggingface.co/Qwen/Qwen3-8B/blob/main/README.md) and
+[Ollama thinking documentation](https://docs.ollama.com/capabilities/thinking).
+
+The Python Ollama adapter already sends `think=false` and drops separate reasoning.
+The pipeline rejects inline reasoning markers. Six prior real guarded Qwen tests
+across both levels delivered no flag or reasoning marker. The configured OpenAI
+model returned no reasoning fields/inline markers in five prior thinking-control
+cases; literal Qwen commands are not treated as OpenAI controls.
+
+A Next.js SDK **simulated** response exposed an inline thinking block before the
+local QA fix; two regression tests reproduced this. The local fix strips closed
+thinking blocks and rejects malformed reasoning or unexpected SSE/NDJSON. No actual
+provider inline secret leak was reproduced. The Python OpenAI adapter returns only
+assistant final content; SDK reasoning, tools and metadata cannot bypass the output
+classifier. All OpenAI calls use `stream=false`.
+
+### Verdict and remaining limits
+
+| Responsibility | Verdict | Limit |
+| --- | --- | --- |
+| Level 7 implementation/enforcement | PASS | Classifier weaknesses remain; successful participant flag recovery unverified |
+| Level 8 implementation/enforcement | PASS | Output ML recall is weak on this set; successful participant flag recovery unverified |
+| Team flag isolation | PASS | Synthetic authorities/teams only; backend authentication remains backend-owned |
+| Provider switching and sanitized contract | PASS | Tested OpenAI model and local Ollama only; arbitrary proxy/model compatibility not claimed |
+| Shared guardrail/configuration tests | PASS | Production supervision/admission/TLS remain host responsibilities |
+| Event difficulty and solvability | PARTIAL | Neither Level 7 nor Level 8 has a demonstrated end-to-end bypass |
+| Complete application launch readiness | PARTIAL | See root CTF report; real OAuth and unmerged team creation remain blockers |
+
+No new extraction exploit search was required for provider support. No classifiers
+were disabled and no permissive fallback, bypass phrase or secret release was added.
+OpenAI model selection can change refusal behavior; event difficulty must be validated
+with the model organizers actually deploy. No production readiness claim is made.
+
+### Files changed for provider support
+
+- `security/adapters/inference.py`, `security/adapters/__init__.py`: official SDK
+  adapter, normalized final response and provider factory; existing Ollama retained.
+- `security/config/providers.py` (new), `security/config/__init__.py`: trusted
+  provider settings, validation and selected model resolution.
+- `security/runtime.py`, `security/deploy.py`, `security/deployment.py`: explicit
+  environment keys, selected-provider preflight and compatible health alias.
+- `security/examples/backend_integration.py`, `security/examples/demo.py`: reusable
+  provider selection in worker lifecycle and portable live-provider CLI.
+- `pyproject.toml`, `uv.lock`, `security/requirements.txt`: optional pinned SDK and
+  reproducible dependency installation.
+- `.github/workflows/security-portability.yml`: SDK extra in existing CPU CI matrix.
+- `security/tests/test_openai_provider.py` (new),
+  `security/tests/test_openai_integration.py` (new),
+  `security/tests/test_deployment.py`: transport, guardrail, startup and opt-in real
+  API coverage; existing lifecycle mocks updated to target the factory.
+- `.env.example`, `security/.env.example`, `README.md`, `security/README.md`,
+  `security/DEPLOYMENT.md`, `security/PORTABILITY_REPORT.md`, this report and
+  `CTF_TEST_REPORT.md`: explicit schemas, setup, limitations and actual evidence.
+
+Earlier uncommitted application QA/bridge/thinking fixes remain in the working tree;
+they are separately identified in the root report. No unrelated frontend/backend
+feature was added as part of Python OpenAI provider support.

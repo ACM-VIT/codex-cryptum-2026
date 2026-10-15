@@ -1,13 +1,14 @@
 """Levels 7/8 with real classifiers and mock inference, or optional local Ollama."""
 
 import argparse
+import os
 import secrets
 from pathlib import Path
 
 import httpx
 
 from security import ContextAuthority, FlagService, SecurityPipeline, load_config
-from security.adapters import OllamaClient
+from security.adapters import create_inference_client
 from security.classifiers.output_classifier import supplementary_match
 from security.evaluation.evaluate import fixture_data
 from security.runtime import load_environment_file, run_cli
@@ -37,7 +38,9 @@ class DemonstrationOutput:
 
 async def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--ollama", action="store_true")
+    live = parser.add_mutually_exclusive_group()
+    live.add_argument("--ollama", action="store_true", help="Legacy shortcut for --provider ollama")
+    live.add_argument("--provider", choices=("ollama", "openai"), help="Real inference provider")
     parser.add_argument(
         "--env-file", type=Path, help="Explicit trusted .env file; no shell required"
     )
@@ -47,8 +50,11 @@ async def main():
     args = parser.parse_args()
     if args.env_file is not None:
         load_environment_file(args.env_file)
-    if args.ollama and args.mock_classifiers:
-        parser.error("Ollama demonstration requires real classifiers")
+    provider = "ollama" if args.ollama else args.provider
+    if provider and args.mock_classifiers:
+        parser.error("Live inference demonstration requires real classifiers")
+    if provider:
+        os.environ["LLM_PROVIDER"] = provider
     development_flag = fixture_data("sample_outputs.json")["development_flags"]["level7"]
     # Never read production master secrets. This invocation has isolated ephemeral flags.
     authority = ContextAuthority(FlagService(secrets.token_bytes(32)), development_flag)
@@ -64,7 +70,7 @@ async def main():
         "Classifier mode:",
         "EXPLICIT MOCK (wiring only)" if args.mock_classifiers else "pinned CPU ML",
     )
-    print("Inference mode:", "local Ollama" if args.ollama else "mock inference")
+    print("Inference mode:", provider if provider else "mock inference")
     flag_a = authority.flag_service.derive_team_flag("demo-a", 8)
     flag_b = authority.flag_service.derive_team_flag("demo-b", 8)
     print("Different team flags:", flag_a != flag_b)
@@ -81,8 +87,8 @@ async def main():
         not authority.flag_service.validate_team_flag("demo-a", 8, flag_b),
     )
     async with httpx.AsyncClient() as http:
-        inference = OllamaClient(http) if args.ollama else MockInference()
-        if args.ollama:
+        inference = create_inference_client(http) if provider else MockInference()
+        if provider:
             await inference.check_available(load_config(7).model)
         for level in (7, 8):
             for message in (

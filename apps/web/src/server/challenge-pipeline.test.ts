@@ -42,8 +42,11 @@ it("runs guards and generation in strict order and uses history only for the con
 
 it("blocked input terminates the pipeline without generation or output judging", async () => {
   const provider = vi.fn().mockResolvedValue("BLOCK");
-  await expect(runChallengeModel(request(8), provider)).resolves.toContain("input classifier");
-  expect(provider).toHaveBeenCalledOnce();
+  const classifiers = { input: vi.fn().mockResolvedValue(false), output: vi.fn() };
+  await expect(runChallengeModel(request(8), provider, classifiers)).resolves.toContain("input classifier");
+  expect(classifiers.input).toHaveBeenCalledOnce();
+  expect(provider).not.toHaveBeenCalled();
+  expect(classifiers.output).not.toHaveBeenCalled();
 });
 
 it("keyword guard runs before any generation", async () => {
