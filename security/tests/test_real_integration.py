@@ -138,3 +138,30 @@ async def test_benign_real_ollama_request(real_pipeline, available_ollama, level
     assert result.status == "allowed", result.code
     assert result.response.strip() and context.protected_flag not in result.response
     assert "<think" not in result.response.lower()
+
+
+async def test_managed_runtime_real_start_requests_and_shutdown(available_ollama):
+    """Real cached weights + actual Ollama; synthetic trusted flags only."""
+    from security.deployment import SecurityRuntime
+
+    authority = ContextAuthority(FlagService(b"managed-synthetic-test-key-" * 2), DEV_LEVEL7)
+    async with httpx.AsyncClient() as http:
+        runtime = SecurityRuntime(authority, OllamaClient(http, available_ollama))
+        try:
+            await runtime.start()
+            assert runtime.health().ready and runtime.health().ollama_preflight_passed
+            pipeline = runtime._pipeline
+            shared = pipeline.inputs[7]._runner
+            assert shared is pipeline.inputs[8]._runner
+            engine = shared.engine
+            for level, team in ((7, "team_alpha"), (8, "team_alpha"), (8, "team_beta")):
+                result = await runtime.handle(
+                    level, team, "Explain in one short sentence how neural networks learn."
+                )
+                assert result.status == "allowed", result.code
+                assert authority.issue(team, level).protected_flag not in result.response
+                assert shared.engine is engine
+            assert {parameter.device.type for parameter in engine.model.parameters()} == {"cpu"}
+        finally:
+            await runtime.aclose()
+        assert runtime.health().state == "closed" and shared.engine is None

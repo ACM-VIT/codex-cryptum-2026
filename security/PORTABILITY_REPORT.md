@@ -198,3 +198,55 @@ vulnerable CTF behavior were not repaired or hidden by this portability work.
 The implementation is ready for cross-platform core CI and Linux backend integration.
 Native Apple Silicon support is a dependency-compatible target pending actual tests.
 Full Intel-macOS local inference remains limited by upstream wheel availability.
+
+## Deployment lifecycle follow-up (PR #3 rework)
+
+The earlier portability audit remains the baseline. This follow-up does not change
+weights, revisions, YAML, thresholds, system prompts, HMAC derivation or flags.
+It adds a framework-independent in-process Python lifecycle contract. The application
+backend now uses Next.js, so the planned host is a private Python security worker.
+The private HTTP wrapper and Next.js wiring are external integration dependencies;
+neither is implemented by this package:
+
+- `security.deployment.SecurityRuntime` owns two CPU model runners, shares the input
+  runner between Levels 7 and 8, eagerly warms them before readiness, and preflights
+  the existing local/remote Ollama client. Construction itself does not load models.
+- Async startup/readiness/draining/shutdown use Python's asyncio/threading APIs,
+  with no shell/OS service-manager assumptions. Model shutdown joins outside the
+  event loop and releases owned engine references. A closed legacy cached runner
+  is now replaced instead of being returned unusably.
+- `python -m security.deploy prepare|check` provides portable preparation and
+  preflight with explicit `.env` and offline options. It does not implement a server
+  or read production secrets during tests.
+- The minimal backend example calls the runtime using backend-authenticated team
+  identity and returns only status/response/code. Its shutdown ordering keeps the
+  application HTTP client alive until accepted requests finish.
+- [DEPLOYMENT.md](DEPLOYMENT.md) compares in-process and private-service options,
+  documents distro setup, native Apple Silicon dependencies, caching, resource
+  estimates, deadlines, failure recovery, capacity limitations and teammate ownership.
+
+### Updated platform evidence
+
+After the earlier report was written, PR #3's six portability CI jobs **all passed**
+for commit `557aa652e441dd6d14b294e956d4869fde0fd4b5`:
+[GitHub Actions PR run](https://github.com/ayaankhatri/Codex-Cryptum-2026/actions/runs/38637206441).
+Ubuntu 24.04 and Apple Silicon macOS 15 jobs tested Python 3.11/3.12 with CPU ML
+imports and mocked/unit execution; Intel macOS tested core/QA only. They did **not**
+load pretrained model weights or run Qwen. Earlier "CI not run" statements above
+refer to the original pre-push validation stage, not current CI history.
+
+At local validation time, this deployment follow-up had not run in remote CI. The
+existing matrix discovers its platform-independent test module on push; consult
+PR #3 checks for the corresponding commit result. Real local deployment validation used Arch Linux x86_64, Python
+3.12.14, cached real CPU classifiers and existing Qwen3-8B. Other distributions,
+native Apple Silicon real model inference, remote real Ollama, containerized
+operation and production ingress capacity remain untested in this follow-up.
+
+The deployment follow-up passed **254 tests** on the local Python 3.12 ML environment,
+including 12 opt-in real integration cases, and **242 tests** on a separate Python
+3.11.16 core-only environment (12 real cases deselected). The new deployment test
+module contains 34 simulated cases. Ruff, lock checks, wheel build/content inspection
+and whitespace checks passed. Offline real preparation and startup preflight also
+passed; measured timings/resources and the integration boundaries are recorded in
+[DEPLOYMENT.md](DEPLOYMENT.md#measured-results-for-this-rework). These observations
+do not certify untested remote hosts, macOS real inference or production throughput.

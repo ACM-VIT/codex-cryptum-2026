@@ -1,5 +1,11 @@
 # Akhand's Level 7–8 security module
 
+Deployment and backend lifecycle instructions are in [DEPLOYMENT.md](DEPLOYMENT.md).
+The Python component loads its CPU classifiers in-process inside a Python security
+worker; Qwen remains an independent Ollama runtime. The application backend uses
+Next.js. A private HTTP wrapper and Next.js wiring are external integration
+dependencies and are not implemented by this package.
+
 This package implements Level 7 input classification, Level 8 input and output
 classification, team-specific flags, and the shared security layer around Qwen3-8B.
 It is independent of a backend framework. The original repository contained only a
@@ -49,7 +55,9 @@ Do not interpret either model's score as a calibrated probability.
 
 Both models load real safetensors weights at the pinned revision with
 `trust_remote_code=False`, run in evaluation/inference mode on **CPU**, and share a
-process cache keyed by model ID and revision. No additional generative model is loaded.
+process cache keyed by model ID and revision in the legacy lazy path. The managed
+`SecurityRuntime` instead owns its two runners and shares the input engine between
+levels; use one lifecycle path per Python security worker. No additional generative model is loaded.
 The input model has roughly 738 MB of FP32 weights and the output model roughly
 328 MB; allow additional RAM for runtime and activations. GPU memory remains available
 for Qwen. Model downloads and caches are excluded from Git.
@@ -139,9 +147,18 @@ policy behavior and leave accelerator memory for Qwen.
 The runtime keeps Transformers 4.57.6 and torch 2.9.1 (Linux `+cpu` variant), plus
 the existing core dependency versions. Python-dotenv 1.2.4 handles explicit startup
 files; psutil 7.2.2 is optional QA tooling. Model weights and revisions are unchanged.
-Initial classifier use downloads the pinned artifacts; warm models before opening
-the competition. First-time downloads may exceed request timeouts and then fail closed.
-Once artifacts exist, use `set -gx HF_HUB_OFFLINE 1` for offline inference.
+Prepare the pinned artifacts before opening the competition:
+
+```text
+uv run --no-sync python -m security.deploy prepare --env-file security/.env --timeout 600
+uv run --no-sync python -m security.deploy check --env-file security/.env --offline
+```
+
+Preparation needs only cache/model settings; the check requires valid trusted Level 7
+and Level 8 configuration and reachable Ollama. `--offline` forbids Hub downloads.
+Set `HF_HUB_OFFLINE=1` in the trusted backend environment after preparation. The
+check exits after closing its models; the backend must warm its own worker during
+startup. Neither command starts an HTTP server. See [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Trusted environment configuration
 
@@ -152,6 +169,11 @@ take precedence over file values. Parsing uses UTF-8, accepts only the documente
 keys, performs no variable interpolation or shell execution, and rejects malformed
 files without printing their contents.
 Never commit the master key or real flags.
+
+The Next.js root `.env` and the Python guardrail `security/.env` have separate schemas.
+The strict Python loader rejects backend-only database/auth/`LLM_*` variables. It does
+not automatically map `FLAG_SECRET` to the HMAC master key or change the Ollama client.
+Agree flag derivation and key ownership with the backend team during integration.
 
 | Variable | Purpose |
 | --- | --- |
@@ -173,9 +195,9 @@ uv run --no-sync python -m security --ollama --env-file security/.env.example
 ```
 
 The demonstration always uses ephemeral development contexts; it does not use the
-file's master key or Level 7 placeholder as production secrets. For real backend
-configuration, copy the example locally, replace secret placeholders privately, and
-call `load_environment_file(Path(".env"))` from `security.runtime` before creating
+file's master key or Level 7 placeholder as production secrets. For Python guardrail
+configuration, copy the example to `security/.env`, replace placeholders privately, and
+call `load_environment_file(Path("security/.env"))` from `security.runtime` before creating
 `ContextAuthority.from_environment()`. Never pass participant-controlled files.
 
 To connect to another hosting machine, set `OLLAMA_URL` in that trusted file, for
@@ -288,55 +310,59 @@ history retrieval, conversation judging, and other levels remain outside this mo
 
 ## Backend integration
 
-Create services once during backend startup and keep them internal:
+Use the managed lifecycle once per Python security worker. Its handler accepts no
+trusted context or inference settings from a participant. Jiya's Next.js backend
+owns authentication and application routes. A private Python transport wrapper and
+Next.js wiring are external integration dependencies; neither is implemented here.
+See the executable Python-side integration helpers in
+[examples/backend_integration.py](examples/backend_integration.py).
 
 ```python
-import httpx
-from security import ContextAuthority, SecurityPipeline
-from security.adapters import OllamaClient
+from security.examples.backend_integration import (
+    participant_message, start_security, stop_security,
+)
 
-authority = ContextAuthority.from_environment()
-pipeline = SecurityPipeline(authority)
+# Trusted guardrail environment injected; Python security-worker startup:
+runtime, http = await start_security()
 
-async def handle_authenticated_message(principal, challenge_id, message):
-    team_id = principal.team_id  # Supplied by the backend's authentication layer.
-    context = authority.issue(team_id, challenge_id)
-    async with httpx.AsyncClient() as http:
-        inference = OllamaClient(http)
-        return await pipeline.secure_inference(
-            challenge_id, team_id, message, context, inference
-        )
+# Future Python wrapper: backend caller verified; identity NEVER from participant JSON:
+result = await participant_message(
+    runtime, authenticated_team_id=verified_backend_identity.team_id,
+    level=validated_request.level, message=validated_request.message,
+)
+# Only serialize result's status, response and code.
+valid = runtime.validate_team_flag(
+    verified_backend_identity.team_id, 8, validated_submission.submitted_flag,
+)
+
+# Worker shutdown, after stopping ingress:
+await stop_security(runtime, http)
 ```
 
-For a real backend, reuse its application-owned HTTP client. An existing Qwen client
-only needs to implement:
+`SecurityRuntime.start()` validates secrets, eagerly warms the two pinned CPU models,
+then preflights Ollama. `health()` supplies private safe readiness metadata;
+`handle()` creates the trusted team/challenge context internally and calls the
+existing pipeline. `aclose()` stops admission, drains requests and joins owned
+model workers before the backend closes its HTTP client. Required model/runtime
+failures never select a mock or bypass screening.
 
-```python
-async def generate(messages, config) -> InferenceResponse:
-    ...  # Adapt the hosting team's client here; return only participant-facing content.
-```
+The existing low-level `SecurityPipeline.secure_inference(level, team, message,
+context, inference_client)` and `ContextAuthority.issue/validate` interfaces remain
+available. Legacy pipeline construction is lazy and process-cached; deploy using one
+managed runtime per worker rather than mixing model ownership paths. The backend's
+existing inference client can implement `generate(messages, config) -> InferenceResponse`;
+the managed runtime also requires `check_available(model) -> None` for startup
+preflight. The bundled `OllamaClient` implements both, with local/remote environment
+configuration. No participant-facing proxy or flag-generation endpoint exists.
 
-This is an integration signature, not a missing package implementation: the bundled
-`OllamaClient` implements it. An OpenAI-compatible/vLLM adapter can implement the same
-protocol later without changing classifiers, policies, or team isolation. No public
-inference proxy or flag-generation endpoint is provided.
-
-The backend's trusted flag verifier should use the same service instance as context
-construction, keeping prompt and verification configuration identical:
-
-```python
-valid = authority.flag_service.validate_team_flag(principal.team_id, 8, submitted_flag)
-```
-
-This checks only the current authenticated team's flag. The backend decides how to
-handle submission, scoring, and responses; those routes are not part of the package.
-
-Public interfaces include `load_config`, `MLInputClassifier.classify_input`,
-`MLOutputClassifier.classify_output`, `PolicyEngine.evaluate_input_policy`,
-`PolicyEngine.evaluate_output_policy`, `build_secure_system_prompt`,
-`ContextAuthority.issue/validate`, `SecurityPipeline.secure_inference`, and
-`FlagService.derive_team_flag/validate_team_flag`. Environment-backed derivation and
-verification helpers are exported from `security` too; service injection is preferred.
+The runtime's Level 8 validator uses the same authority, key and rotation as prompt
+construction. The backend owns authenticated flag submission and scoring. Low-level
+`FlagService.derive_team_flag/validate_team_flag`, `load_config`, the async classifier
+protocols, typed policy decisions and prompt construction retain their interfaces.
+The future private HTTP wrapper should invoke the complete Python pipeline so
+Next.js cannot accidentally skip required guardrails. The example contains no HTTP
+listener or authentication implementation. Independent classifier hosting can use
+the existing protocols later if needed.
 
 ## Failure behavior and concurrency
 

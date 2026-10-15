@@ -86,13 +86,34 @@ class ModelRunner:
         self.config = config
         self.factory = factory
         self.engine = None
+        self._state = "cold"
+        self._state_lock = threading.Lock()
+        self._closed = False
         self._slot = threading.BoundedSemaphore(1)
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="cryptum-classifier")
 
     def _score(self, text: str, hypotheses: tuple[str, ...], max_tokens: int) -> float:
-        if self.engine is None:
-            self.engine = self.factory(self.config)
-        return self.engine.score(text, hypotheses, max_tokens)
+        try:
+            if self.engine is None:
+                with self._state_lock:
+                    self._state = "loading"
+                self.engine = self.factory(self.config)
+            value = self.engine.score(text, hypotheses, max_tokens)
+            if not valid_score(value):
+                raise SecurityError("invalid_model_response")
+            with self._state_lock:
+                self._state = "ready"
+            return value
+        except Exception:
+            with self._state_lock:
+                self._state = "error"
+            raise
+
+    @property
+    def state(self) -> str:
+        """Fixed operator metadata, never exception strings or model content."""
+        with self._state_lock:
+            return "closed" if self._closed else self._state
 
     async def score(
         self,
@@ -102,6 +123,8 @@ class ModelRunner:
         max_tokens: int = 512,
         timeout: float = 30,
     ) -> float:
+        if self.state == "closed":
+            raise SecurityError("classifier_unavailable")
         if not self._slot.acquire(blocking=False):
             raise SecurityError("classifier_busy")
         try:
@@ -126,7 +149,11 @@ class ModelRunner:
             raise SecurityError("classifier_unavailable") from None
 
     def close(self):
+        with self._state_lock:
+            self._closed = True
         self._executor.shutdown(wait=True, cancel_futures=True)
+        # Workers have finished: release references to model/activation memory.
+        self.engine = None
 
 
 _cache: dict[tuple[str, str], ModelRunner] = {}
@@ -134,7 +161,8 @@ _cache_lock = threading.Lock()
 _threads_configured = False
 
 
-def get_model_runner(config: ClassifierConfig) -> ModelRunner:
+def configure_cpu_threads() -> None:
+    """Set the process-wide torch pool once, before classifiers begin serving."""
     global _threads_configured
     with _cache_lock:
         if not _threads_configured:
@@ -148,7 +176,12 @@ def get_model_runner(config: ClassifierConfig) -> ModelRunner:
             except Exception:
                 raise SecurityError("classifier_unavailable") from None
             _threads_configured = True
+
+
+def get_model_runner(config: ClassifierConfig) -> ModelRunner:
+    configure_cpu_threads()
+    with _cache_lock:
         key = (config.model_id, config.revision)
-        if key not in _cache:
+        if key not in _cache or _cache[key].state == "closed":
             _cache[key] = ModelRunner(config)
         return _cache[key]
