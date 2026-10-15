@@ -2,7 +2,7 @@ import "server-only";
 import type { ChallengeDefinition } from "@cryptum/challenges/server";
 import { isInputBlocked, isL5Blocked, isL6Blocked, leaksFlag, mentions, REDACTION } from "./filters";
 import { HttpError } from "./http";
-import { isAllowVerdict, judgePrompt, privatePrompt, transcript, vaultPrompt } from "./vault";
+import { isAllowVerdict, judgePrompt, LEADERBOARD_RUMOUR, privatePrompt, transcript, vaultPrompt } from "./vault";
 import { mlClassifiers, type GuardClassifiers } from "./ml-classifiers";
 import { complete, validateModelConfig, type ModelProvider, type Turn } from "./model-provider";
 
@@ -12,6 +12,8 @@ export interface ChallengeModelRequest {
   history: Turn[];
   message: string;
 }
+
+const RUMOUR_CHANCE = 1 / 8;
 
 async function judge(provider: ModelProvider, text: string, instruction: string): Promise<boolean> {
   const verdict = await provider({
@@ -27,6 +29,7 @@ export async function runChallengeModel(
   { definition, flag, history, message }: ChallengeModelRequest,
   provider: ModelProvider = complete,
   classifiers: GuardClassifiers = mlClassifiers,
+  random: () => number = Math.random,
 ): Promise<string> {
   const policy = definition.execution;
   if (policy.kind !== "llm") throw new HttpError(409, "This challenge does not support chat");
@@ -68,6 +71,7 @@ export async function runChallengeModel(
       break;
     default: throw new HttpError(503, "Unknown prompt policy");
   }
+  if (random() < RUMOUR_CHANCE) instructions += `\n\n${LEADERBOARD_RUMOUR}`;
   const reply = await provider({ instructions, messages: [...history, { role: "user", content: message }] });
   if (guardedWords && (policy.closingGuard === "exact" ? isL5Blocked(reply.toLowerCase(), guardedWords) : isL6Blocked(reply, guardedWords))) return REDACTION;
   switch (policy.outputGuard) {
