@@ -20,11 +20,14 @@ async function classify(path: string, payload: object): Promise<boolean> {
       throw new Error("Invalid classifier endpoint");
     }
     const result = await fetch(`${base.replace(/\/$/, "")}${path}`, {
-      method: "POST", cache: "no-store", redirect: "error",
+      method: "POST", cache: "no-store", redirect: "manual",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload), signal: AbortSignal.timeout(35_000),
     });
-    if (!result.ok) throw new Error("Classifier unavailable");
+    if (!result.ok) {
+      await result.body?.cancel();
+      throw new Error("Classifier unavailable");
+    }
     const reader = result.body?.getReader();
     if (!reader) throw new Error("Missing classifier response");
     const chunks: Uint8Array[] = [];
