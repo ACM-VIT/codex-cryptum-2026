@@ -22,12 +22,7 @@ coverage/
 *.pem
 *.key
 
-.venv/
 .bootstrap/
-__pycache__/
-*.py[cod]
-*.egg-info/
-.pytest_cache/
 .ruff_cache/
 .coverage
 htmlcov/
@@ -41,8 +36,6 @@ models/
 *.onnx
 *.bin
 evaluation-local*.json
-CLAUDE.local.md
-.claude/
 venv/
 .mypy_cache/
 .idea/
