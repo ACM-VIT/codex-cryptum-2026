@@ -7,6 +7,8 @@ import {
 import { ArrowUp, LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const MAX_MESSAGE_LENGTH = 2000; // Match the authenticated chat API limit.
+
 interface PromptInputBoxProps {
   value: string;
   onValueChange: (value: string) => void;
@@ -60,7 +62,7 @@ export const PromptInputBox = forwardRef<
           value={value}
           onChange={(event) => onValueChange(event.target.value)}
           placeholder={placeholder}
-          maxLength={4000}
+          maxLength={MAX_MESSAGE_LENGTH}
           disabled={blocked}
           rows={2}
           onKeyDown={(event) => {
@@ -76,7 +78,7 @@ export const PromptInputBox = forwardRef<
         />
         <div className="ai-prompt-actions">
           <span>Enter to send · Shift + Enter for a new line</span>
-          <span className="prompt-count">{value.length} / 4000</span>
+          <span className="prompt-count">{value.length} / {MAX_MESSAGE_LENGTH}</span>
           <button
             type="submit"
             aria-label={isLoading ? "Sending message" : "Send message"}
