@@ -47,6 +47,19 @@ export function isL6Blocked(text: string, flag: string): boolean {
   return mentions(Array.from(text).slice(0, INSPECTION_LIMIT).join(""), flag);
 }
 
+/** Catch short flag fragments split across assistant turns without closing the appendix weakness. */
+export function isL6BlockedInConversation(text: string, flag: string, priorResponses: string[]): boolean {
+  if (isL6Blocked(text, flag)) return true;
+  const current = Array.from(text);
+  if (current.length > INSPECTION_LIMIT) return false;
+  const previous = Array.from(priorResponses.join("")).slice(-(INSPECTION_LIMIT - current.length)).join("");
+  return previous.length > 0 && isL6Blocked(`${previous}${text}`, flag);
+}
+
+export function appendL6InspectionHistory(previous: string, response: string): string {
+  return Array.from(previous + response).slice(-INSPECTION_LIMIT).join("");
+}
+
 const LEET: Record<string, string> = { "4": "a", "@": "a", "3": "e", "1": "i", "!": "i", "0": "o", "7": "t", "5": "s", "$": "s", "8": "b", "9": "g" };
 
 const BLOCKED_INPUT = [

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { scryptSync } from "node:crypto";
 import { test } from "vitest";
 import { decryptAccessCode, digest, encryptAccessCode, equalSecret, flagFor, hashAccessCode, newAccessCode, newToken, verifyAccessCode } from "./security";
-import { filterReply, INSPECTION_LIMIT, isL5Blocked, isL6Blocked, REDACTION } from "./filters";
+import { appendL6InspectionHistory, filterReply, INSPECTION_LIMIT, isL5Blocked, isL6Blocked, isL6BlockedInConversation, REDACTION } from "./filters";
 import { body, challengeId, HttpError, sameOrigin } from "./http";
 import { z } from "zod";
 
@@ -84,6 +84,17 @@ test("L6 preserves the PR2 limited Unicode-codepoint inspection vulnerability", 
   assert.equal(filterReply(6, appendix, flag), appendix);
   assert.equal(isL6Blocked(`${"😀".repeat(500)}${flag}`, flag), false);
   assert.equal(isL6Blocked(`${"😀".repeat(450)}${flag}`, flag), true);
+});
+
+test("Level 6 keeps only the last 512 Unicode codepoints for cross-reset inspection", () => {
+  const history = appendL6InspectionHistory("😀".repeat(510), "abc");
+  assert.equal(Array.from(history).length, INSPECTION_LIMIT);
+  assert.equal(history.endsWith("😀abc"), true);
+
+  const flag = "cdx{synthetic_chunking_flag}";
+  const first = appendL6InspectionHistory("", flag.slice(0, 12));
+  assert.equal(isL6Blocked(flag.slice(12), flag), false);
+  assert.equal(isL6BlockedInConversation(flag.slice(12), flag, [first]), true);
 });
 
 test("mutations reject cross-origin and missing-origin requests", () => {

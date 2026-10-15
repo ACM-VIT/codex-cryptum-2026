@@ -3,6 +3,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { REDACTION } from "./filters";
 import { HttpError } from "./http";
+import { MODEL_REQUEST_TIMEOUT_MS } from "./timeouts";
 
 export interface Turn { role: "user" | "assistant"; content: string }
 
@@ -69,7 +70,7 @@ export async function complete({ instructions, messages, maxOutputTokens = 2048,
         ? { ...turn, content: `${turn.content} /no_think` } : turn) : messages,
       maxOutputTokens,
       maxRetries: 0,
-      timeout: { totalMs: 120_000 },
+      timeout: { totalMs: MODEL_REQUEST_TIMEOUT_MS },
       // Preserve the existing API control: verified with Luna and local Ollama /v1.
       // Qwen's soft /no_think hint alone is not a hard disable in that runtime.
       providerOptions: { openai: { reasoningEffort: "none" } },
