@@ -175,6 +175,25 @@ h3 {
 .bento-card:focus-within {
   border-color: #d5f4f093;
 }
+.bento-card.bento-captured {
+  background: #14352d;
+  border-color: #58b995;
+}
+.bento-card.bento-captured:hover,
+.bento-card.bento-captured:focus-within {
+  background: #1b4438;
+  border-color: #9be7c6;
+}
+.bento-captured .bento-background {
+  color: #84dfb6;
+}
+.bento-captured .bento-top > span:last-child {
+  color: #d1fbe7;
+  background: #245944;
+  border: 1px solid #65bb95;
+  border-radius: 4px;
+  padding: 4px 8px;
+}
 .bento-level-1,
 .bento-level-8 {
   grid-row: span 2;
@@ -1098,7 +1117,7 @@ select {
   margin-left: auto;
   white-space: nowrap;
 }
-.ai-prompt-actions button {
+.ai-prompt-box > button {
   display: grid;
   place-items: center;
   flex: 0 0 36px;
@@ -1174,8 +1193,8 @@ h3,
 }
 .challenge-page {
   width: min(1100px, calc(100% - 48px));
-  margin: 32px auto 60px;
-  padding: 28px 40px 40px;
+  margin: 12px auto;
+  padding: 16px 28px;
   border: 1px solid var(--line);
   border-radius: 24px;
   background: var(--panel-soft);
@@ -1186,7 +1205,7 @@ h3,
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 30px;
+  margin-bottom: 10px;
 }
 .challenge-panel-toolbar .challenge-back {
   margin: 0;
@@ -1203,8 +1222,8 @@ h3,
   }
   .challenge-page {
     width: calc(100% - 24px);
-    margin: 12px auto 32px;
-    padding: 20px 18px 28px;
+    margin: 8px auto;
+    padding: 12px 16px;
     border-radius: 20px;
   }
   .dialog {
@@ -1215,6 +1234,7 @@ h3,
 /* Restore the original typography for these page headings only. */
 .cryptum-dashboard .page-heading h1,
 .leaderboard-page .page-heading h1,
+.team-page .page-heading h1,
 .join-form h1 {
   font-family: "Fraunces", Georgia, serif;
   font-weight: 400;
@@ -1401,9 +1421,11 @@ h3,
   margin-top: 44px;
 }
 .team-section h2 {
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--body);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
   color: var(--muted);
   margin-bottom: 14px;
 }
@@ -1426,16 +1448,6 @@ h3,
 }
 .team-solves li span:last-child {
   color: var(--accent);
-}
-.team-member-initial {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: #d8ff3e1a;
-  color: var(--accent);
-  font-size: 12px;
 }
 .team-badge {
   padding: 3px 7px;
@@ -1535,4 +1547,199 @@ h3,
     flex-direction: column;
     align-items: stretch;
   }
+}
+
+/* Team actions appear only after Google identity is established. */
+.join-auth {
+  display: block;
+  margin-top: 36px;
+}
+
+/* Keep the composer visible; only conversation history needs to scroll. */
+.challenge-page {
+  height: calc(100dvh - 110px);
+  min-height: 560px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+.challenge-overview {
+  min-height: 0;
+  max-height: 42dvh;
+  overflow-y: auto;
+  /* The shared Input focus outline extends five pixels beyond its border. */
+  padding: 6px;
+  margin: -6px;
+}
+.challenge-overview h1 {
+  font-size: clamp(26px, 3vw, 38px);
+  margin-bottom: 6px;
+}
+.challenge-description {
+  font-size: 15px;
+  line-height: 1.4;
+}
+.challenge-badges {
+  margin-top: 8px;
+  gap: 6px;
+}
+.challenge-guide {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.challenge-guide summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.challenge-guide summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.challenge-guide .challenge-steps {
+  margin-top: 6px;
+  padding-left: 0;
+  list-style: none;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.challenge-steps li + li { margin-top: 3px; }
+.challenge-overview-actions { margin-top: 8px; gap: 16px; }
+.challenge-overview-actions .button { min-height: 36px; padding: 8px 14px; }
+.challenge-flag-form {
+  max-width: none;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 14px;
+  padding-bottom: 6px;
+}
+.challenge-flag-form label { grid-column: 1 / -1; margin: 0; }
+.challenge-flag-form > .button { min-height: 44px; margin: 0; }
+.challenge-flag-form .enhanced-input { margin: 0; }
+.challenge-conversation {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 12px;
+  padding-top: 10px;
+}
+.conversation-heading { flex-shrink: 0; }
+.conversation-heading h2 { font-size: 18px; }
+.conversation-limit { margin-top: 4px; font-size: 13px; }
+.conversation-messages {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  padding: 10px 0;
+  overscroll-behavior: contain;
+}
+.conversation-empty { padding: 8px 0; font-size: 14px; }
+.challenge-conversation .ai-prompt-box { flex-shrink: 0; padding: 8px; border-radius: 16px; }
+.challenge-conversation .ai-prompt-box textarea {
+  min-height: 36px;
+  max-height: 96px;
+  padding: 6px 8px;
+}
+.challenge-conversation .ai-prompt-actions { padding-top: 4px; }
+.challenge-page.challenge-page-chat {
+  height: auto;
+  min-height: 0;
+  grid-template-rows: auto auto auto;
+}
+.challenge-page-chat .conversation-messages {
+  flex: 0 1 auto;
+  max-height: min(280px, 36dvh);
+  padding: 6px 0;
+}
+.challenge-conversation .message { padding: 10px 0; }
+.challenge-conversation .message-meta { margin-bottom: 4px; }
+.challenge-conversation .message-meta b { font-size: 12px; }
+.challenge-conversation .message-content { font-size: 14px; line-height: 1.5; }
+.challenge-conversation .copy-button { padding-top: 4px; }
+.challenge-conversation .ai-prompt-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: end;
+  column-gap: 8px;
+}
+.challenge-conversation .ai-prompt-actions {
+  grid-column: 1 / -1;
+  padding: 4px 8px 0;
+  font-size: 11px;
+}
+.challenge-page > .sandbox-panel {
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.challenge-page .sandbox-panel .page-heading { margin-bottom: 12px; }
+@media (max-width: 640px) {
+  .challenge-page { height: calc(100dvh - 96px); min-height: 540px; }
+  .challenge-overview h1 { font-size: 26px; }
+  .challenge-description { font-size: 14px; }
+  .challenge-flag-form { grid-template-columns: minmax(0, 1fr) auto; }
+  .challenge-flag-form label { grid-column: 1 / -1; }
+}
+@media (max-width: 420px) {
+  .challenge-flag-form { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* A compact team overview keeps members and progress alongside each other. */
+.team-page {
+  max-width: 1200px;
+  min-height: 0;
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+.team-page .page-heading { margin-bottom: 14px; gap: 16px; }
+.team-page .page-heading h1 { font-size: clamp(30px, 3vw, 42px); margin-bottom: 4px; overflow-wrap: anywhere; }
+.team-page .leaderboard-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 0; }
+.team-page .leaderboard-stats > div { padding: 12px 18px; }
+.team-page .leaderboard-stats > div > span { margin-bottom: 6px; }
+.team-page .leaderboard-stats b { font-size: 30px; }
+.team-page .team-section { margin-top: 16px; min-width: 0; }
+.team-page .team-section h2 { margin-bottom: 8px; }
+.team-page .team-code-card { padding: 10px 14px; }
+.team-page .team-code { font-size: 20px; }
+.team-page .field-help { margin-top: 4px; font-size: 12px; line-height: 1.4; }
+.team-details-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; }
+.team-page .team-members li,
+.team-page .team-solves li { gap: 8px; padding: 7px 0; line-height: 1.35; }
+.team-page .team-members li { flex-wrap: wrap; }
+.team-page .team-members li > span:first-child,
+.team-page .team-solves li > span:first-child { overflow-wrap: anywhere; min-width: 0; }
+.team-page .team-solves li > span:last-child { white-space: nowrap; }
+.team-page .team-actions { margin-top: 16px; }
+.team-page .button { min-height: 40px; padding: 9px 14px; }
+@media (max-width: 640px) {
+  .team-page { padding-top: 16px; padding-bottom: 16px; }
+  .team-details-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .team-page .leaderboard-stats > div { padding: 10px; }
+  .team-page .leaderboard-stats > div > span { font-size: 12px; }
+  .team-page .team-code-row { gap: 10px; }
+}
+
+.leaderboard-page { padding-top: 20px; padding-bottom: 24px; }
+.leaderboard-page .page-heading { margin-bottom: 16px; }
+.leaderboard-page .page-heading h1 { font-size: clamp(32px, 3.5vw, 46px); margin-bottom: 6px; }
+.leaderboard-page .leaderboard-stats { margin-top: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.leaderboard-page .leaderboard-stats > div { padding: 12px 18px; border-bottom: 0; }
+.leaderboard-page .leaderboard-stats > div:not(:last-child) { border-right: 1px solid var(--line); }
+.leaderboard-page .leaderboard-stats > div > span { margin-bottom: 6px; }
+.leaderboard-page .leaderboard-stats b { font-size: 30px; }
+.leaderboard-page .leaderboard-toolbar { margin: 16px 0 12px; gap: 12px; }
+.leaderboard-page .leaderboard-table th { padding: 10px 14px; }
+.leaderboard-page .leaderboard-table td { padding: 10px 14px; }
+.leaderboard-page .rank { font-size: 22px; }
+.leaderboard-page .table-foot { padding: 10px 0; margin-top: 0; }
+.leaderboard-page .sandbox-link { margin-top: 16px; padding: 14px 18px; gap: 16px; }
+.leaderboard-page .sandbox-link-icon { width: 36px; height: 36px; }
+.leaderboard-page .sandbox-link h2 { font-size: 22px; }
+.leaderboard-page .empty-state { padding: 24px 16px; gap: 8px; }
+@media (max-width: 640px) {
+  .leaderboard-page .leaderboard-stats > div { padding: 10px; }
+  .leaderboard-page .leaderboard-stats > div > span { font-size: 12px; }
+  .leaderboard-page .leaderboard-stats b { font-size: 26px; }
 }

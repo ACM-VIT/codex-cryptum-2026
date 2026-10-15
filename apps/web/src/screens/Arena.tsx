@@ -63,8 +63,9 @@ function ArenaContent({ id }: { id: number }) {
     );
   const sandbox = challenge.interaction === "sandbox";
   const flagCompletion = challenge.completionMethod === "flag";
+  const solved = session.solved.includes(id) || accepted;
   const send = async () => {
-    if (sandbox || !prompt.trim() || busy || exhausted) return;
+    if (sandbox || solved || !prompt.trim() || busy || exhausted) return;
     setError("");
     setSending(true);
     const content = prompt.trim();
@@ -84,7 +85,7 @@ function ArenaContent({ id }: { id: number }) {
   };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!flagCompletion || !flag.trim() || busy) return;
+    if (!flagCompletion || solved || !flag.trim() || busy) return;
     setFeedback("");
     setSubmitting(true);
     try {
@@ -99,6 +100,7 @@ function ArenaContent({ id }: { id: number }) {
       if (mounted.current) {
         setFeedback(text);
         setAccepted(result.status !== "incorrect");
+        if (result.status !== "incorrect") setFlagOpen(false);
         if (result.status === "accepted") setFlag("");
       }
       if (result.status === "accepted")
@@ -115,7 +117,7 @@ function ArenaContent({ id }: { id: number }) {
     }
   };
   return (
-    <AnimatedPage className="challenge-page">
+    <AnimatedPage className={`challenge-page ${sandbox ? "challenge-page-sandbox" : "challenge-page-chat"}`}>
       <div className="challenge-panel-toolbar">
         <Link className="challenge-back" href="/arena" aria-label="Back to challenges">
           <ArrowLeft size={16} /> <span className="label-long">Back to challenges</span><span className="label-short">All</span>
@@ -149,14 +151,16 @@ function ArenaContent({ id }: { id: number }) {
           <span className="difficulty">{sandbox ? "Application sandbox" : "Prompt injection"}</span>
           <span className="difficulty">{flagCompletion ? "Submit a flag" : "Verify an exploit"}</span>
           <span className="difficulty">{challenge.difficulty}</span>
-          {session.solved.includes(id) && <span className="difficulty difficulty-intro">Completed</span>}
+          {solved && <span className="difficulty difficulty-intro">Completed</span>}
         </div>
+        <details className="challenge-guide">
+        <summary>How to play</summary>
         <ol className="challenge-steps" aria-label="How to complete this challenge">
           {sandbox ? (
             <>
-              <li><strong>Inspect the board.</strong> Review the isolated sandbox teams, IDs, and scores below.</li>
-              <li><strong>Edit another sandbox team’s score.</strong> Select its row, choose a score that puts it first, and apply the sandbox PATCH.</li>
-              <li><strong>Verify completion.</strong> Check the exploit to earn points. No chat or flag is needed; official standings cannot be edited here.</li>
+              <li><strong>Study the board.</strong> Review the isolated teams, IDs, and scores below.</li>
+              <li><strong>Find your route to first place.</strong> The challenge uses a separate sandbox; official standings cannot be edited here.</li>
+              <li><strong>Verify completion.</strong> Move your own team to the top, then check your result. No chat or flag is needed.</li>
             </>
           ) : (
             <>
@@ -166,9 +170,11 @@ function ArenaContent({ id }: { id: number }) {
             </>
           )}
         </ol>
+        </details>
         <div className="challenge-overview-actions">
           <span className="challenge-points">{challenge.points} points</span>
-          {flagCompletion && <button
+          {flagCompletion && solved && <span className="success-text">Flag captured</span>}
+          {flagCompletion && !solved && <button
             type="button"
             className="button button-outline"
             aria-expanded={flagOpen}
@@ -178,7 +184,7 @@ function ArenaContent({ id }: { id: number }) {
             {flagOpen ? "Cancel" : "Enter flag"}
           </button>}
         </div>
-        {flagCompletion && flagOpen && (
+        {flagCompletion && !solved && flagOpen && (
           <form
             className="challenge-flag-form"
             id="flag-entry"
@@ -205,13 +211,13 @@ function ArenaContent({ id }: { id: number }) {
             {feedback}
           </output>
         )}
-        {accepted && next && (
+        {solved && next && (
           <Link className="button challenge-next" href={`/arena/${next.id}`}>
             Next challenge: {next.title} <ArrowRight size={16} />
           </Link>
         )}
       </section>
-      {sandbox ? <SandboxLeaderboard showOrganizerTools={false} /> : <section
+      {sandbox ? <SandboxLeaderboard showOrganizerTools={false} /> : solved ? null : <section
         className="challenge-conversation"
         aria-labelledby="conversation-title"
       >
@@ -289,7 +295,7 @@ function ArenaContent({ id }: { id: number }) {
           }
         />
       </section>}
-      {!sandbox && resetting && (
+      {!sandbox && !solved && resetting && (
         <Dialog
           title="Start this conversation again?"
           onClose={() => setResetting(false)}

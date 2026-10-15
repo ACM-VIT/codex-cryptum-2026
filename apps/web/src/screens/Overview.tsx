@@ -93,7 +93,10 @@ export function Join() {
       <div className="join-illustration"><KeyholeMark className="join-keyhole" /></div>
       <section className="join-form">
         <h1>{mode === "create" ? "Start a team." : "Find your team."}</h1>
-        {account.data ? <p className="signed-in-as">Signed in as <b>{account.data.user.email}</b></p> : <GoogleSignIn callbackURL="/join" />}
+        {account.isPending ? <output className="join-auth">Checking your sign-in…</output> : !account.data ? (
+          <GoogleSignIn className="join-auth" callbackURL="/join" />
+        ) : <>
+        <p className="signed-in-as">Signed in as <b>{account.data.user.email}</b></p>
         <div className="segmented join-mode" aria-label="Team access">
           <button type="button" onClick={() => switchMode("join")} aria-pressed={mode === "join"}>Join a team</button>
           <button type="button" onClick={() => switchMode("create")} aria-pressed={mode === "create"}>Create a team</button>
@@ -108,7 +111,7 @@ export function Join() {
           ) : (
             <>
               <label htmlFor="team-code">Team code</label>
-              <Input id="team-code" size="lg" value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. CC-1234ABCD" maxLength={128} autoComplete="off" required />
+              <Input id="team-code" size="lg" value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. 482913" inputMode="numeric" maxLength={128} autoComplete="off" required />
               <span className="field-help">Ask a teammate for your team's code.</span>
             </>
           )}
@@ -117,6 +120,7 @@ export function Join() {
           </button>
         </form>
         {error && <ErrorNotice message={error} />}
+        </>}
       </section>
     </AnimatedPage>
   );

@@ -32,6 +32,7 @@ async function request<T>(
     response = await fetch(`${base}${path}`, {
       method,
       credentials: "include",
+      cache: "no-store",
       headers: data ? { "Content-Type": "application/json" } : undefined,
       body: data ? JSON.stringify(data) : undefined,
       signal: AbortSignal.timeout(90_000),

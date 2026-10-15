@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, randomInt, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCallback);
@@ -10,8 +10,7 @@ export function equalSecret(actual: string, expected: string): boolean {
   return timingSafeEqual(Buffer.from(digest(actual), "hex"), Buffer.from(digest(expected), "hex"));
 }
 
-const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-export const newAccessCode = () => `CC-${Array.from(randomBytes(10), (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join("")}`;
+export const newAccessCode = () => randomInt(0, 1_000_000).toString().padStart(6, "0");
 
 export async function hashAccessCode(code: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");

@@ -115,7 +115,7 @@ export function App({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{ session, setSession, challenges, busy, transact, toast: setToast }}>
       <a href="#main" className="skip-link" onClick={event => { event.preventDefault(); document.getElementById("main")?.focus(); }}>Skip to content</a>
-      <header className={`icon-header ${pathname === "/" ? "icon-header-home" : ""}`}>
+      <header className={`icon-header ${pathname === "/" && !error ? "icon-header-home" : ""}`}>
         <Link href="/" className="brand-keyhole" aria-label="Codex Cryptum home"><KeyholeMark /></Link>
         <nav className="icon-nav" aria-label="Main navigation">
           {[

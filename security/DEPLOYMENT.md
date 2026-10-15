@@ -630,3 +630,14 @@ synthetic transport token, uses synthetic flags, and writes only decisions/count
 and timings to the enforcement reports. Ordinary CI stays mocked and offline.
 See [TEST_REPORT.md](TEST_REPORT.md#classifier-enforcement-follow-up--2026-10-15)
 for actual results and the distinction between stability and detection accuracy.
+
+### Integration with the updated feat/dev challenge prompts
+
+The current Next.js challenge definitions use private/vault prompts rather than the
+older hardened template. Levels 7/8 retain the backend's existing closing-word state
+transition: the model gets a flag only when that trusted transition is satisfied.
+Classifier validation accepts these protected prompt policies and still requires
+input ML for both levels and output ML for Level 8. The classifier fixes preserve
+this mechanic, the teammate-owned prompt helpers and the leaderboard hint behavior.
+Historical evaluation results using the older prompts are identified in the report;
+they do not establish solvability for this updated challenge configuration.

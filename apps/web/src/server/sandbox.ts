@@ -1,23 +1,34 @@
 import "server-only";
 import { getDb, sandboxTeams, exploitEvents, solves, challenges } from "@cryptum/db";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { HttpError } from "./http";
 import { lock } from "./challenges";
 import { equalSecret } from "./security";
 import { sandboxChallengeId } from "./challenge-config";
+import { isSandboxCompletion, shouldRecordSandboxExploit } from "./sandbox-logic";
 
 const SCOPE = "challenge-sandbox";
-const SEEDS = [
-  { id: "team-aurora", name: "Aurora Labs", score: 4200 },
-  { id: "team-borealis", name: "Borealis Security", score: 3300 },
-  { id: "team-cipher", name: "Cipher Collective", score: 2700 },
-  { id: "team-ember", name: "Ember Research", score: 1900 },
-];
 const publicEntry = (row: typeof sandboxTeams.$inferSelect) => ({ team_id: row.id, display_name: row.name, score: row.score });
 
 export async function sandboxLeaderboard() {
-  const rows = await getDb().select().from(sandboxTeams).orderBy(desc(sandboxTeams.score), asc(sandboxTeams.id));
-  return { entries: rows.map((row, index) => ({ ...publicEntry(row), rank: index + 1 })), scope: SCOPE, objective: "Reach first place in the sandbox, then verify completion." };
+  return getDb().transaction(async (tx) => {
+    await lock(tx, "sandbox:leaderboard");
+    await syncSandboxTeams(tx);
+    const rows = await tx.select().from(sandboxTeams).orderBy(desc(sandboxTeams.score), asc(sandboxTeams.id));
+    return { entries: rows.map((row, index) => ({ ...publicEntry(row), rank: index + 1 })), scope: SCOPE, objective: "Move your team to the top of this isolated board. Entries change through PATCH /api/challenge/leaderboard/teams/{team_id}; verify with POST /api/challenge/leaderboard/complete." };
+  });
+}
+
+// New registrations enter the sandbox with their real score. Existing edits
+// remain isolated until an organizer resets the challenge.
+async function syncSandboxTeams(tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0]) {
+  await tx.execute(sql`DELETE FROM exploit_events WHERE target_team_id IN
+    (SELECT id FROM sandbox_teams WHERE id NOT IN (SELECT id::text FROM teams))`);
+  await tx.execute(sql`DELETE FROM sandbox_teams WHERE id NOT IN (SELECT id::text FROM teams)`);
+  await tx.execute(sql`INSERT INTO sandbox_teams (id, name, score)
+    SELECT teams.id::text, teams.name, coalesce(sum(solves.points), 0)::integer
+    FROM teams LEFT JOIN solves ON solves.team_id = teams.id
+    GROUP BY teams.id, teams.name ON CONFLICT (id) DO NOTHING`);
 }
 
 export async function patchSandboxTeam(actorTeamId: string, target: string, patch: { score?: number; display_name?: string }) {
@@ -28,7 +39,14 @@ export async function patchSandboxTeam(actorTeamId: string, target: string, patc
     const [previousFirst] = await tx.select().from(sandboxTeams).orderBy(desc(sandboxTeams.score), asc(sandboxTeams.id)).limit(1);
     // Intentional sandbox-only IDOR. Never change authoritative teams or solve points here.
     const [updated] = await tx.update(sandboxTeams).set({ score: patch.score ?? current.score, name: patch.display_name ?? current.name }).where(eq(sandboxTeams.id, target)).returning();
-    if (patch.score !== undefined && target !== actorTeamId && previousFirst && target !== previousFirst.id && patch.score !== current.score && patch.score > previousFirst.score) {
+    if (patch.score !== undefined && previousFirst && shouldRecordSandboxExploit({
+      actorTeamId,
+      targetTeamId: target,
+      previousTargetScore: current.score,
+      targetScore: patch.score,
+      previousFirstId: previousFirst.id,
+      previousFirstScore: previousFirst.score,
+    })) {
       await tx.insert(exploitEvents).values({ actorTeamId, targetTeamId: target });
     }
     if (!updated) throw new HttpError(503, "Sandbox update unavailable");
@@ -46,7 +64,7 @@ export async function completeSandbox(teamId: string) {
     if (!challenge) throw new HttpError(404, "Challenge unavailable");
     const [winner] = await tx.select().from(sandboxTeams).orderBy(desc(sandboxTeams.score), asc(sandboxTeams.id)).limit(1);
     const [event] = await tx.select().from(exploitEvents).where(eq(exploitEvents.actorTeamId, teamId)).orderBy(desc(exploitEvents.createdAt), desc(exploitEvents.id)).limit(1);
-    if (!winner || !event || winner.id !== event.targetTeamId || event.targetTeamId === teamId) return { completed: false, points_awarded: 0 };
+    if (!isSandboxCompletion(teamId, winner?.id, event?.targetTeamId ?? null)) return { completed: false, points_awarded: 0 };
     const award = await tx.insert(solves).values({ teamId, challengeId, points: challenge.points }).onConflictDoNothing().returning();
     return { completed: true, points_awarded: award.length ? challenge.points : 0 };
   });
@@ -62,7 +80,7 @@ export async function resetSandbox() {
     await lock(tx, "sandbox:leaderboard");
     await tx.delete(exploitEvents);
     await tx.delete(sandboxTeams);
-    await tx.insert(sandboxTeams).values(SEEDS);
+    await syncSandboxTeams(tx);
     // Resetting a playground must never remove or rewrite official solve awards.
   });
   return { reset: true, scope: SCOPE };

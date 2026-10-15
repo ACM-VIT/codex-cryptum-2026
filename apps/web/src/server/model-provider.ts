@@ -43,7 +43,7 @@ const providerFetch: typeof fetch = async (input, init) => {
   return new Response(Buffer.concat(chunks), { status: response.status, headers: response.headers });
 };
 
-export interface ModelRequest { instructions: string; messages: Turn[]; maxOutputTokens?: number }
+export interface ModelRequest { instructions: string; messages: Turn[]; maxOutputTokens?: number; temperature?: number }
 export type ModelProvider = (request: ModelRequest) => Promise<string>;
 
 export function validateModelConfig(): void { modelConfig(); }
@@ -57,7 +57,7 @@ export function withoutThinking(value: string): string {
   return final;
 }
 
-export async function complete({ instructions, messages, maxOutputTokens = 2048 }: ModelRequest): Promise<string> {
+export async function complete({ instructions, messages, maxOutputTokens = 2048, temperature = 0.3 }: ModelRequest): Promise<string> {
   const { model, ...config } = modelConfig();
   // Only known Qwen3 family identifiers get Qwen's soft prompt control.
   const qwen = /^(?:qwen3(?::|$)|qwen\/qwen3-)/i.test(model);
@@ -73,7 +73,7 @@ export async function complete({ instructions, messages, maxOutputTokens = 2048 
       // Preserve the existing API control: verified with Luna and local Ollama /v1.
       // Qwen's soft /no_think hint alone is not a hard disable in that runtime.
       providerOptions: { openai: { reasoningEffort: "none" } },
-      temperature: 0.3,
+      temperature,
       telemetry: { isEnabled: false },
     });
     if (result.finishReason === "content-filter") return REDACTION;

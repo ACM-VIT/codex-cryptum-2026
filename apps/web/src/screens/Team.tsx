@@ -124,13 +124,13 @@ export function TeamPage() {
           </div>
         ) : <p className="field-help">{details ? "This team's code was created before codes could be shown again. Ask your team creator for it." : "Loading team code…"}</p>}
       </section>
+      <div className="team-details-grid">
       <section className="team-section">
         <h2>Members</h2>
         {error ? <ErrorNotice message={error} /> : (
           <ul className="team-members">
             {details?.members.map((member, index) => (
               <li key={`${member.name}-${index}`}>
-                <span className="team-member-initial" aria-hidden="true">{member.name.charAt(0).toUpperCase()}</span>
                 <span>{member.name}</span>
                 {member.you && <span className="team-badge">You</span>}
                 {member.creator && <span className="team-badge">Creator</span>}
@@ -152,6 +152,7 @@ export function TeamPage() {
           </ul>
         ) : <p className="field-help">No flags captured yet.</p>}
       </section>
+      </div>
       <div className="dialog-actions team-actions">
         <Link href="/arena" className="button">Challenges <ArrowUpRight size={16} /></Link>
         <button className="button button-outline" disabled={busy} onClick={startLeaving}><LogOut size={16} /> Leave team</button>

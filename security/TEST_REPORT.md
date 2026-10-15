@@ -879,3 +879,43 @@ an interactive browser/Google OAuth test or a deployment to production. macOS wa
 retested in this follow-up. Native inference timeouts cannot terminate a stuck torch
 thread; admission is bounded and fails closed. Production ingress/TLS, supervision,
 capacity and event difficulty validation remain team responsibilities.
+
+## Follow-up PR integration with latest feat/dev
+
+Before publishing the classifier fixes, PR #3 was found already merged and the
+latest target was fetched at `7c2d54d`. It was merged into the classifier branch
+without dropping teammates' changes. The conflict in `apps/web/src/server/llm.ts`
+was resolved by retaining the target's private/vault prompts, trusted closing-word
+state, leaderboard rumour, Level 9 logic and output behavior, together with the
+classifier verdict/role/policy validation. Protected-policy validation accepts the
+target's private/vault policies rather than requiring the removed hardened policy.
+The target's bounded rejected-body draining transport fix was retained.
+
+**Web prompt behavior changed upstream:** Levels 7/8 now receive their flag in the
+model context only after the backend's existing closing-word state permits it.
+The earlier 40-repeat/two-turn measurements above describe the pre-merge prompts;
+they are not evidence about solvability of the new closing-word challenges.
+Two added mocked-provider regressions verify that a generic game-ended claim does
+not insert the flag, trusted closing-word history does insert it, and classifiers
+still execute in both cases. No challenge definitions or flag derivation were changed
+relative to the current `feat/dev` target.
+
+Validation on the combined branch:
+
+- Python 3.12 unit suite: **341 passed**, 16 real cases deselected.
+- JavaScript fast suite: **192 passed** (5 catalog + 187 web); 24 gated cases skipped.
+- Real Python HTTP/CPU classifiers with controlled LLM fixtures plus two actual
+  configured OpenAI smoke calls: **12 passed**, 2 longer repetition cases intentionally
+  excluded from this rerun to avoid repeating billable tests. Safe input, blocked
+  input, output inspection, concurrency, bad token and clean shutdown were exercised.
+- JavaScript lint, typecheck, production build, Python Ruff/format and whitespace
+  checks: **passed**.
+- Isolated PostgreSQL suite: **8 passed, 1 failed**. The unchanged target test at
+  `apps/web/src/server/integration.test.ts:126` expects `CC-` plus ten characters,
+  whereas the unchanged target implementation in `security.ts` generates six digits.
+  Both files match `origin/feat/dev`; this is a pre-existing authentication test
+  mismatch and is not fixed or hidden in this classifier PR.
+
+No real env files, supplied credentials, model caches/weights or local `AGENTS.md`
+are included. GitHub CI results must be assessed after the follow-up PR is opened;
+local Linux results do not establish that macOS CI passed.
