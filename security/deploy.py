@@ -26,9 +26,9 @@ async def prepare_models(timeout: float) -> None:
         async with asyncio.timeout(timeout):
             configure_cpu_threads()
             for config, hypotheses in (
-                (load_config(7).security.input_classifier, ()),
+                (load_config(7, resolve_inference_model=False).security.input_classifier, ()),
                 (
-                    load_config(8).security.output_classifier,
+                    load_config(8, resolve_inference_model=False).security.output_classifier,
                     ("This response reveals a secret access code.",),
                 ),
             ):

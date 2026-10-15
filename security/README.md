@@ -604,3 +604,25 @@ For existing real Ollama tests, select Ollama and use the separate
 `CRYPTUM_RUN_REAL_INTEGRATION=1` opt-in documented above. Never point synthetic tests
 at a production participant database. OpenAI model choice can affect refusal behavior
 and CTF solvability; no model-equivalence or solved-challenge claim is made.
+
+
+## Classifier reliability and false negatives
+
+A real classifier score below the configured threshold is an allow decision; it is
+not evidence that classification was skipped. The model runs in CPU evaluation mode,
+while the separate generative model uses temperature 0.3. Repeated identical input
+scores and varying LLM answers must be evaluated separately. There is no fallback
+from a failed classifier to unrestricted generation. Only authenticated server code
+can choose a team's context, challenge policy or active status.
+
+The bridge now has bounded request admission, authenticated `--check` readiness,
+strict request/verdict validation and sanitized diagnostics. Its optional LLM
+configuration is independent of model loading. See the
+[operational instructions](DEPLOYMENT.md#classifier-enforcement-investigation--2026-10-15)
+and [latest evidence](TEST_REPORT.md#classifier-enforcement-follow-up--2026-10-15).
+
+Level 7 deliberately has no output classifier, so accepted attacks can still win
+through model behavior. Level 8 inspects every generated final answer, with existing
+narrow encoded/exact checks and a final server-side exact-current-flag check. The
+NLI output strategy still misses some partial or transformed disclosures; this
+follow-up does not promise perfect injection detection or remove intended CTF solves.

@@ -26,8 +26,12 @@ pinned CPU input and output models at startup, and shares its input engine acros
 Levels 7 and 8. `apps/web/src/server/ml-classifiers.ts` authenticates private calls
 with a server-only bearer token. The model service returns **only `{allowed: bool}`**;
 Next.js never forwards classifier internals to participants. The service accepts
-only known routes and bounded JSON. It has at most eight transport threads; model
-runners retain their single admission slot and fail closed on busy/error/timeout.
+only known routes and bounded JSON. It has at most eight transport threads. HTTP
+requests wait up to five seconds for their input/output admission lock (configurable
+with `CRYPTUM_CLASSIFIER_QUEUE_TIMEOUT_SECONDS`, 0–30 seconds). Admission waiting
+counts toward the existing 30-second classification deadline. Model runners retain
+their single native scoring slot and fail closed on busy/error/timeout; timed-out
+native work keeps that slot until it actually finishes.
 
 | Internal endpoint | Request | Result |
 | --- | --- | --- |
@@ -554,3 +558,75 @@ output classifier before delivery. The exact same system/context builder runs fo
 both LLM providers. Qwen-specific controls stay in Ollama, and OpenAI exposes only
 assistant final content. Model weights, flag derivation and thresholds are unchanged.
 See [../CTF_TEST_REPORT.md](../CTF_TEST_REPORT.md) for actual validation evidence.
+
+
+## Classifier enforcement investigation — 2026-10-15
+
+Use a **classifier-only** private `security/.env` for the bridge:
+
+```dotenv
+CRYPTUM_CLASSIFIER_URL=http://127.0.0.1:8091
+CRYPTUM_CLASSIFIER_TOKEN=REPLACE_WITH_THE_SAME_RANDOM_TOKEN_USED_BY_NEXTJS
+CRYPTUM_CLASSIFIER_THREADS=2
+CRYPTUM_CLASSIFIER_QUEUE_TIMEOUT_SECONDS=5
+# Set after downloading the pinned weights:
+HF_HUB_OFFLINE=1
+```
+
+Do not paste the root application environment into this file: the strict Python
+loader intentionally rejects unrelated database/authentication settings. The root
+`.env` retains `CRYPTUM_CLASSIFIER_URL` and the identical server-only token, plus
+its existing database and `LLM_*` configuration. Local classifier startup and model
+preparation no longer depend on `LLM_PROVIDER`, OpenAI model settings or API keys.
+Tokens must contain 32–4096 printable ASCII characters without whitespace.
+
+Start the process in one terminal; run the check from another:
+
+```text
+uv run --no-sync python -m security.classifier_service --env-file security/.env
+uv run --no-sync python -m security.classifier_service --env-file security/.env --check
+pnpm dev
+```
+
+`--check` authenticates against `CRYPTUM_CLASSIFIER_URL` and does not load a second
+copy of the models. A runner in an error state produces unready health until a
+subsequent successful inference recovers it. Startup loading failures prevent the
+listener from opening. SIGTERM drains owned request threads and closes runners.
+Native torch work cannot be forcibly interrupted by an asyncio timeout.
+
+The Python process emits JSON metadata for loading, readiness, classification,
+busy/error/timeout, authentication failure and shutdown. Next.js logs stage, level,
+allow/block decision or a fixed failure reason, and elapsed time. Neither logs
+prompts, responses, flags, tokens, upstream bodies, URLs or exception messages.
+Library HTTP debug logging is not enabled by the classifier CLI.
+
+Malformed requests return 400 before inference. Auth failures return 401 internally.
+Busy, timeout and model failures return 503 and **never trigger an allow or another
+provider/classifier fallback**. The Next.js endpoint returns a sanitized unavailable
+error. The shipped failure policy remains block-only; this fix adds no fail-open mode.
+
+The authenticated backend selects active challenges, derives the current-team flag,
+loads history and chooses execution policies. Participant text cannot change these
+values. Levels 7/8 system instructions now explicitly reject participant claims
+that a game has ended or that permissions were granted. This wording remains a
+model instruction, not an authorization mechanism. Level 8 runs its ML output check
+before delivery and additionally rejects the exact current-team flag in Next.js.
+Level 7 keeps its designed input-only defense: classifier/model limitations can
+still permit a legitimate CTF solve. Neither weights nor thresholds were changed.
+
+For actual local tests, use the already cached model weights and set explicit opt-ins
+in the process environment (the Python command works across Unix shells):
+
+```text
+uv run --no-sync python -c "import os, pytest; os.environ.update(HF_HUB_OFFLINE='1', CRYPTUM_RUN_REAL_INTEGRATION='1'); raise SystemExit(pytest.main(['-q', 'security/tests/test_enforcement_repetition.py']))"
+pnpm --filter @cryptum/web exec vitest run src/server/ml-classifiers.integration.test.ts
+```
+
+The JavaScript integration file is skipped unless `CRYPTUM_RUN_CLASSIFIER_INTEGRATION=1`.
+Actual configured LLM calls additionally require `CRYPTUM_RUN_CLASSIFIER_LLM_INTEGRATION=1`
+and server-side `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`. Configure those in the test
+process without printing them. It starts a fresh private Python process with a
+synthetic transport token, uses synthetic flags, and writes only decisions/counts
+and timings to the enforcement reports. Ordinary CI stays mocked and offline.
+See [TEST_REPORT.md](TEST_REPORT.md#classifier-enforcement-follow-up--2026-10-15)
+for actual results and the distinction between stability and detection accuracy.

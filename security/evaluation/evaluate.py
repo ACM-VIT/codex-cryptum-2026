@@ -95,7 +95,7 @@ def sweep(rows: list[dict], initial: float, *, supplemented: bool = False) -> di
 
 
 async def evaluate_classifiers() -> dict:
-    configs = {i: load_config(i) for i in (7, 8)}
+    configs = {i: load_config(i, resolve_inference_model=False) for i in (7, 8)}
     input_config = configs[7].security.input_classifier.model_copy(
         update={"timeout_seconds": 300.0}
     )

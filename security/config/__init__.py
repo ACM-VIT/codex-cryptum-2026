@@ -86,7 +86,9 @@ class ChallengeConfig(StrictConfig):
         return self
 
 
-def load_config(challenge_id: int, path: Path | None = None) -> ChallengeConfig:
+def load_config(
+    challenge_id: int, path: Path | None = None, *, resolve_inference_model: bool = True
+) -> ChallengeConfig:
     if type(challenge_id) is not int or challenge_id not in (7, 8):
         raise SecurityError("configuration_unavailable")
     source = path or files(__package__).joinpath(f"level{challenge_id}.yaml")
@@ -101,7 +103,8 @@ def load_config(challenge_id: int, path: Path | None = None) -> ChallengeConfig:
                 rule["action"] = Action(rule["action"])
         if "allowed_roles" in data:
             data["allowed_roles"] = tuple(data["allowed_roles"])
-        data["model"] = selected_model(data.get("model", "qwen3:8b"))
+        if resolve_inference_model:
+            data["model"] = selected_model(data.get("model", "qwen3:8b"))
         config = ChallengeConfig.model_validate(data)
         if config.challenge_id != challenge_id:
             raise ValueError("Mismatched challenge")

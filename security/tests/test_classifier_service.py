@@ -21,6 +21,7 @@ HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 def server():
     service = bridge.ClassifierService.__new__(bridge.ClassifierService)
     service.ready = True
+    service.runners = (SimpleNamespace(state="ready"), SimpleNamespace(state="ready"))
     service.policies = PolicyEngine({i: load_config(i) for i in (7, 8)})
     service.inputs = {7: StubInput(0.77), 8: StubInput(0.77)}
     service.output = StubOutput()
@@ -169,3 +170,161 @@ async def test_real_runner_lifecycle_with_simulated_weights(monkeypatch):
     finally:
         service.close()
     assert not service.ready and all(runner.engine is None for runner in service.runners)
+
+
+@pytest.mark.parametrize("message", ["", " ", None, [], 12, "bad\x00input", "x" * 6001])
+def test_malformed_text_rejected_before_ml(server, message):
+    _, service, url = server
+    result = httpx.post(
+        url + "/classify-input", headers=HEADERS, json={"challenge_id": 7, "message": message}
+    )
+    assert result.status_code == 400
+    assert not service.inputs[7].calls
+
+
+@pytest.mark.parametrize("level,threshold", [(7, 0.75), (8, 0.80)])
+def test_exact_threshold_enforced(server, level, threshold):
+    _, service, url = server
+    for score, allowed in ((threshold - 0.0001, True), (threshold, False)):
+        service.inputs[level].score = score
+        result = httpx.post(
+            url + "/classify-input",
+            headers=HEADERS,
+            json={"challenge_id": level, "message": "fixture"},
+        )
+        assert result.json() == {"allowed": allowed}
+
+
+@pytest.mark.parametrize("provider", ["openai", "invalid-provider"])
+async def test_local_models_independent_of_llm_configuration(monkeypatch, provider):
+    monkeypatch.setenv("LLM_PROVIDER", provider)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    class Engine:
+        def __init__(self, config):
+            pass
+
+        def score(self, text, hypotheses, max_tokens):
+            return 0.1
+
+    monkeypatch.setattr(bridge, "configure_cpu_threads", lambda: None)
+    monkeypatch.setattr(bridge, "ModelRunner", lambda config: ModelRunner(config, Engine))
+    service = bridge.ClassifierService()
+    try:
+        await service.start()
+        assert service.healthy()
+        assert await service.classify("/classify-input", {"challenge_id": 7, "message": "hello"})
+        assert service.inputs[7]._runner is service.inputs[8]._runner
+    finally:
+        service.close()
+
+
+async def test_missing_weights_fail_closed_without_private_path(monkeypatch, caplog):
+    def unavailable(config):
+        raise FileNotFoundError("private-cache-path-marker")
+
+    monkeypatch.setattr(bridge, "configure_cpu_threads", lambda: None)
+    monkeypatch.setattr(bridge, "ModelRunner", lambda config: ModelRunner(config, unavailable))
+    service = bridge.ClassifierService()
+    try:
+        with pytest.raises(SecurityError, match="classifier_unavailable"):
+            await service.start()
+        assert not service.ready
+        assert "private-cache-path-marker" not in caplog.text
+    finally:
+        service.close()
+
+
+def test_auth_health_reflects_runner_error(server):
+    _, service, url = server
+    bridge.check_service(TOKEN, url)
+    service.runners[0].state = "error"
+    assert httpx.get(url + "/health", headers=HEADERS).status_code == 503
+    with pytest.raises(SecurityError, match="classifier_not_ready"):
+        bridge.check_service(TOKEN, url)
+    service.runners[0].state = "ready"
+    bridge.check_service(TOKEN, url)
+
+
+def test_queue_saturation_errors_then_recovers(server):
+    transport, service, url = server
+    transport.queue_timeout = 0.01
+    gate = transport._inference_slots["input"]
+    gate.acquire()
+    try:
+        result = httpx.post(
+            url + "/classify-input", headers=HEADERS, json={"challenge_id": 8, "message": "hello"}
+        )
+        assert result.status_code == 503 and not service.inputs[8].calls
+    finally:
+        gate.release()
+    assert httpx.post(
+        url + "/classify-input", headers=HEADERS, json={"challenge_id": 8, "message": "hello"}
+    ).json() == {"allowed": True}
+
+
+def test_concurrent_http_calls_serialized_and_all_classified(server):
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    _, service, url = server
+    active = maximum = 0
+    lock = threading.Lock()
+
+    class SlowInput(StubInput):
+        async def classify_input(self, message, challenge_id):
+            nonlocal active, maximum
+            with lock:
+                active += 1
+                maximum = max(maximum, active)
+            try:
+                time.sleep(0.04)
+                return await super().classify_input(message, challenge_id)
+            finally:
+                with lock:
+                    active -= 1
+
+    model = SlowInput()
+    service.inputs = {7: model, 8: model}
+
+    def request(level):
+        return httpx.post(
+            url + "/classify-input",
+            headers=HEADERS,
+            json={"challenge_id": level, "message": "hello"},
+        ).json()
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        assert list(pool.map(request, [7, 8, 7])) == [{"allowed": True}] * 3
+    assert maximum == 1 and len(model.calls) == 3
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-1", "31", "invalid"])
+def test_invalid_queue_config_rejected(monkeypatch, value):
+    monkeypatch.setenv("CRYPTUM_CLASSIFIER_QUEUE_TIMEOUT_SECONDS", value)
+    with pytest.raises(SecurityError, match="invalid_configuration"):
+        bridge.PrivateClassifierServer(("127.0.0.1", 0), SimpleNamespace(), TOKEN)
+
+
+def test_timeout_is_fail_closed_and_next_request_recovers(server, caplog):
+    _, service, url = server
+    config = service.policies.config(8).model_dump()
+    config["security"]["input_classifier"]["timeout_seconds"] = 0.01
+    from security.config import ChallengeConfig
+
+    service.policies = PolicyEngine({8: ChallengeConfig.model_validate(config)})
+
+    class SlowInput:
+        async def classify_input(self, message, challenge_id):
+            await asyncio.sleep(60)
+
+    service.inputs[8] = SlowInput()
+    result = httpx.post(
+        url + "/classify-input", headers=HEADERS, json={"challenge_id": 8, "message": "hello"}
+    )
+    assert result.status_code == 503 and "classifier_timeout" in caplog.text
+    service.inputs[8] = StubInput()
+    assert httpx.post(
+        url + "/classify-input", headers=HEADERS, json={"challenge_id": 8, "message": "hello"}
+    ).json() == {"allowed": True}
