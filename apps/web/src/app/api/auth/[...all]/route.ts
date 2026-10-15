@@ -1,3 +1,4 @@
+import { withDatabaseRequest } from "../../../../server/database-request";
 import { toNextJsHandler } from "better-auth/next-js";
 import {
   getAuth,
@@ -23,5 +24,5 @@ async function handle(request: Request) {
   return request.method === "GET" ? handlers.GET(request) : handlers.POST(request);
 }
 
-export const GET = handle;
-export const POST = handle;
+export const GET = (request: Request) => withDatabaseRequest(() => handle(request));
+export const POST = GET;

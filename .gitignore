@@ -43,3 +43,9 @@ venv/
 .eslintcache
 .turbo/
 Thumbs.db
+
+# Cloudflare build output
+.open-next/
+.wrangler/
+.cloudflare/
+.dev.vars*

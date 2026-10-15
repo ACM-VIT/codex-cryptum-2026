@@ -15,7 +15,9 @@
     "test:db": "pnpm --filter @cryptum/web test:db",
     "db:generate": "pnpm --filter @cryptum/db generate",
     "db:migrate": "pnpm --filter @cryptum/db migrate",
-    "db:seed": "pnpm --filter @cryptum/db seed"
+    "db:seed": "pnpm --filter @cryptum/db seed",
+    "build:cloudflare": "pnpm --filter @cryptum/web exec opennextjs-cloudflare build && node scripts/check-cloudflare-build.mjs && pnpm --filter cryptum-cloudflare build",
+    "deploy": "pnpm build:cloudflare && pnpm --filter cryptum-cloudflare deploy"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

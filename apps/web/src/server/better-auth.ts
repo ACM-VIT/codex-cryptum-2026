@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getDb } from "@cryptum/db";
+import { getDb, type Database } from "@cryptum/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
@@ -42,7 +42,7 @@ export class GoogleAuthRequiredError extends Error {
   }
 }
 
-function createAuth() {
+function createAuth(database: Database) {
   const { GOOGLE_CLIENT_ID: clientId, GOOGLE_CLIENT_SECRET: clientSecret,
     BETTER_AUTH_SECRET: secret, BETTER_AUTH_URL: baseURL } = process.env;
   if (!clientId || !clientSecret || !secret || secret.length < 32 || !baseURL || !process.env.DATABASE_URL) {
@@ -50,7 +50,7 @@ function createAuth() {
   }
 
   return betterAuth({
-    database: drizzleAdapter(getDb(), { provider: "pg", schema: authSchema }),
+    database: drizzleAdapter(database, { provider: "pg", schema: authSchema }),
     secret,
     baseURL,
     socialProviders: { google: { clientId, clientSecret } },
@@ -59,11 +59,17 @@ function createAuth() {
   });
 }
 
-let auth: ReturnType<typeof createAuth> | undefined;
+const authByDatabase = new WeakMap<Database, ReturnType<typeof createAuth>>();
 
 // Do not connect to PostgreSQL or require production secrets during next build.
 export function getAuth() {
-  return auth ??= createAuth();
+  const database = getDb();
+  let auth = authByDatabase.get(database);
+  if (!auth) {
+    auth = createAuth(database);
+    authByDatabase.set(database, auth);
+  }
+  return auth;
 }
 
 /** Validate the Google-only auth session; never trust an identity supplied by the client. */

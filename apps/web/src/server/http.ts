@@ -1,3 +1,4 @@
+import { withDatabaseRequest } from "./database-request";
 import { z } from "zod";
 import { challengeIdSchema } from "@cryptum/contracts";
 
@@ -11,7 +12,7 @@ export function json(data: unknown, status = 200): Response {
 
 export function endpoint(fn: (request: Request) => Promise<Response>) {
   return async (request: Request) => {
-    try { return await fn(request); }
+    try { return await withDatabaseRequest(() => fn(request)); }
     catch (error) {
       if (error instanceof HttpError) return json({ error: error.message }, error.status);
       // Better Auth's requireGoogleUser may throw an HTTP response/error.

@@ -1,11 +1,13 @@
 packages:
   - apps/*
   - packages/*
+  - infra/cloudflare
 
 allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+  workerd: true
 
 minimumReleaseAgeExclude:
   - '@better-auth/core@1.7.8'
@@ -32,3 +34,6 @@ minimumReleaseAgeExclude:
   - react@19.3.1
   - '@ai-sdk/gateway@4.0.113'
   - ai@7.0.140
+
+patchedDependencies:
+  "@opennextjs/cloudflare@1.20.11": patches/@opennextjs__cloudflare@1.20.11.patch

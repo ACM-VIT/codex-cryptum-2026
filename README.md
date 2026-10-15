@@ -41,6 +41,23 @@ http://localhost:3000/api/auth/callback/google
 
 For deployment, use your HTTPS domain in both `BETTER_AUTH_URL` and the Google redirect URI. Missing credentials produce an error, not a demo fallback.
 
+## Cloudflare deployment
+
+Cloudflare Workers Builds deploys `main` to **https://codex.acmvit.in**. The connected GitHub repository is `ACM-VIT/codex-cryptum-2026`; the build command is `pnpm build:cloudflare` and the deploy command is `pnpm --filter cryptum-cloudflare deploy`. Builds use Node.js 26 and pnpm 12.11.2.
+
+`infra/cloudflare/cloudflare.config.ts` declares the Worker, custom domain and Hyperdrive binding. Hyperdrive uses the existing Neon database with query caching disabled so scores and challenge state stay current. Database clients and Better Auth adapters are scoped to each Worker request. Local commands continue using `DATABASE_URL` from `.env`.
+
+The OpenNext build uses webpack and a pinned adapter patch that inlines Next.js 16.4's `preview-props.json`. The patch prevents a runtime manifest error after an otherwise successful build. `apps/web/wrangler.jsonc` supplies adapter build settings; deployment uses the `cf` CLI in the separate infrastructure workspace.
+
+To deploy locally, run `pnpm deploy` after authenticating `cf`. Application secrets are already stored as encrypted Worker secrets. To replace them from the ignored root `.env`, run:
+
+```sh
+pnpm build:cloudflare
+pnpm --filter cryptum-cloudflare exec cf deploy --prebuilt --secrets-file ../../.env
+```
+
+Google OAuth must allow `https://codex.acmvit.in/api/auth/callback/google`. Never commit `.env` or paste its values into build commands. The Python classifier remains a separate authenticated HTTPS service configured through the Worker secrets.
+
 ## Model hosting
 
 The event uses OpenAI: set `LLM_API_KEY`, keep `LLM_BASE_URL=https://api.openai.com/v1` and `LLM_MODEL=gpt-6-luna`. The self-hosted Qwen setup below is a fallback only.
