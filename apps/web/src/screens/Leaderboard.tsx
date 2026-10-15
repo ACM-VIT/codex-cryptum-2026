@@ -47,7 +47,6 @@ export function LeaderboardPage() {
       <div className="page-heading">
         <div>
           <h1>Leaderboard</h1>
-          <p>Authoritative event standings — sandbox changes do not affect this board.</p>
         </div>
       </div>
       <div className="leaderboard-stats">
@@ -156,9 +155,6 @@ export function LeaderboardPage() {
         )}
       </div>
       <div className="table-foot">
-        <span>
-          {error ? "UPDATES INTERRUPTED · RETRYING" : "AUTO-UPDATES EVERY 3 SECONDS"} · {data ? `${data.teams.length} TEAMS` : "—"}
-        </span>
         <span>
           {data
             ? `UPDATED ${new Date(data.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
