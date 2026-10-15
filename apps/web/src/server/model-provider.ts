@@ -21,7 +21,12 @@ function modelConfig() {
 
 // Keep transport hardening while delegating provider requests and parsing to the SDK.
 const providerFetch: typeof fetch = async (input, init) => {
-  const response = await fetch(input, { ...init, cache: "no-store", redirect: "error" });
+  // Workers supports manual redirects; reject them before reading any body.
+  const response = await fetch(input, { ...init, cache: "no-store", redirect: "manual" });
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel();
+    throw new Error("Provider redirect refused");
+  }
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   if (contentType.includes("text/event-stream") || contentType.includes("application/x-ndjson")) {
     await response.body?.cancel();

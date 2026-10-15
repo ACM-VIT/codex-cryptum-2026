@@ -189,9 +189,24 @@ it("keeps SDK transport uncached, refuses redirects, and bounds response bytes",
   vi.stubGlobal("fetch", fetcher);
   const signal = AbortSignal.timeout(1000);
   await transport("https://model.example/v1/chat/completions", { signal, method: "POST" });
-  expect(fetcher).toHaveBeenCalledWith("https://model.example/v1/chat/completions", { signal, method: "POST", cache: "no-store", redirect: "error" });
+  expect(fetcher).toHaveBeenCalledWith("https://model.example/v1/chat/completions", { signal, method: "POST", cache: "no-store", redirect: "manual" });
   fetcher.mockResolvedValue(new Response("x".repeat(262145)));
   await expect(transport("https://model.example/v1/chat/completions")).rejects.toThrow("Provider response too large");
+});
+
+it.each([301, 302, 303, 307, 308])("rejects provider HTTP %i without following credentials to another host", async (status) => {
+  await runModel(1, "cdx{private}", [], "hello");
+  const transport = sdk.createOpenAI.mock.calls[0]?.[0].fetch as typeof fetch;
+  const response = new Response("redirect body", { status, headers: { Location: "https://other.example" } });
+  const body = response.body;
+  if (!body) throw new Error("Missing test response body");
+  const cancel = vi.spyOn(body, "cancel");
+  const fetcher = vi.fn().mockResolvedValue(response);
+  vi.stubGlobal("fetch", fetcher);
+  await expect(transport("https://model.example/v1/chat/completions")).rejects.toThrow("Provider redirect refused");
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ redirect: "manual" });
+  expect(cancel).toHaveBeenCalledOnce();
 });
 
 it.each([7, 8])("does not deliver inline thinking at level %i", async (level) => {
