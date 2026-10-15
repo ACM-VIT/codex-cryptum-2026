@@ -1,5 +1,7 @@
 # Calling the model
 
+The event runs on OpenAI (`gpt-6-luna`), so none of this is needed unless we fall back to self-hosting Qwen.
+
 For Backend. Only the backend server calls this, never the browser.
 
 - **URL:** `http://<model-machine-ip>:8080/v1` (OpenAI-compatible)

@@ -45,6 +45,17 @@ Run the attacks:
 python3 scripts/attack_levels.py
 ```
 
+To run them against OpenAI instead of the Qwen gate:
+
+```bash
+export CDX_MODEL_URL=https://api.openai.com/v1
+export CDX_MODEL=gpt-6-luna
+export CDX_API_KEY='<your key>'
+python3 scripts/attack_levels.py
+```
+
+The results below are from `qwen3:8b`.
+
 21 attacks were each run twice:
 
 | | Level 3 | Level 9 |

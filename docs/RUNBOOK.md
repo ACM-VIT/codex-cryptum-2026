@@ -1,5 +1,7 @@
 # Event-day runbook
 
+Only needed if we fall back to self-hosting Qwen. The event runs on OpenAI.
+
 Run commands from the repo root on the model machine (macOS or Linux).
 
 ## How it's set up
