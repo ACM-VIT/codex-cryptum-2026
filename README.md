@@ -29,7 +29,7 @@ Keep these in the root `.env`. Never commit it.
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth web client |
 | `LLM_API_KEY` | Model provider key |
 | `LLM_BASE_URL` | OpenAI-compatible base URL, e.g. `https://api.openai.com/v1` |
-| `LLM_MODEL` | `gpt-6-luna` |
+| `LLM_MODEL` | `gpt-6-luna` (the event model), or `qwen3:8b` for the self-hosted fallback (see `docs/ENDPOINT.md`) |
 | `FLAG_SECRET` | Independent random secret, at least 32 bytes |
 | `ORGANIZER_TOKEN` | Independent secret for resetting the sandbox |
 
@@ -40,6 +40,14 @@ http://localhost:3000/api/auth/callback/google
 ```
 
 For deployment, use your HTTPS domain in both `BETTER_AUTH_URL` and the Google redirect URI. Missing credentials produce an error, not a demo fallback.
+
+## Model hosting
+
+The event uses OpenAI: set `LLM_API_KEY`, keep `LLM_BASE_URL=https://api.openai.com/v1` and `LLM_MODEL=gpt-6-luna`. The self-hosted Qwen setup below is a fallback only.
+
+- **Backend team:** [docs/ENDPOINT.md](docs/ENDPOINT.md), how to call the model.
+- **Event day:** [docs/RUNBOOK.md](docs/RUNBOOK.md), setup, fixes and backup.
+- **Levels 3 and 9:** [docs/LEVELS.md](docs/LEVELS.md), how they work and test results.
 
 ## Layout
 
