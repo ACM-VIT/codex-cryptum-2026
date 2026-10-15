@@ -5,6 +5,7 @@ import { HttpError } from "./http";
 import { lock } from "./challenges";
 import { equalSecret } from "./security";
 import { sandboxChallengeId } from "./challenge-config";
+import { isSandboxCompletion, shouldRecordSandboxExploit } from "./sandbox-logic";
 
 const SCOPE = "challenge-sandbox";
 const publicEntry = (row: typeof sandboxTeams.$inferSelect) => ({ team_id: row.id, display_name: row.name, score: row.score });
@@ -14,7 +15,7 @@ export async function sandboxLeaderboard() {
     await lock(tx, "sandbox:leaderboard");
     await syncSandboxTeams(tx);
     const rows = await tx.select().from(sandboxTeams).orderBy(desc(sandboxTeams.score), asc(sandboxTeams.id));
-    return { entries: rows.map((row, index) => ({ ...publicEntry(row), rank: index + 1 })), scope: SCOPE, objective: "Move another team into first place in this isolated copy, then verify completion." };
+    return { entries: rows.map((row, index) => ({ ...publicEntry(row), rank: index + 1 })), scope: SCOPE, objective: "Move your team to the top of this isolated board, then verify completion." };
   });
 }
 
@@ -38,7 +39,14 @@ export async function patchSandboxTeam(actorTeamId: string, target: string, patc
     const [previousFirst] = await tx.select().from(sandboxTeams).orderBy(desc(sandboxTeams.score), asc(sandboxTeams.id)).limit(1);
     // Intentional sandbox-only IDOR. Never change authoritative teams or solve points here.
     const [updated] = await tx.update(sandboxTeams).set({ score: patch.score ?? current.score, name: patch.display_name ?? current.name }).where(eq(sandboxTeams.id, target)).returning();
-    if (patch.score !== undefined && target !== actorTeamId && previousFirst && target !== previousFirst.id && patch.score !== current.score && patch.score > previousFirst.score) {
+    if (patch.score !== undefined && previousFirst && shouldRecordSandboxExploit({
+      actorTeamId,
+      targetTeamId: target,
+      previousTargetScore: current.score,
+      targetScore: patch.score,
+      previousFirstId: previousFirst.id,
+      previousFirstScore: previousFirst.score,
+    })) {
       await tx.insert(exploitEvents).values({ actorTeamId, targetTeamId: target });
     }
     if (!updated) throw new HttpError(503, "Sandbox update unavailable");
@@ -56,7 +64,7 @@ export async function completeSandbox(teamId: string) {
     if (!challenge) throw new HttpError(404, "Challenge unavailable");
     const [winner] = await tx.select().from(sandboxTeams).orderBy(desc(sandboxTeams.score), asc(sandboxTeams.id)).limit(1);
     const [event] = await tx.select().from(exploitEvents).where(eq(exploitEvents.actorTeamId, teamId)).orderBy(desc(exploitEvents.createdAt), desc(exploitEvents.id)).limit(1);
-    if (!winner || !event || winner.id !== event.targetTeamId || event.targetTeamId === teamId) return { completed: false, points_awarded: 0 };
+    if (!isSandboxCompletion(teamId, winner?.id, event?.targetTeamId ?? null)) return { completed: false, points_awarded: 0 };
     const award = await tx.insert(solves).values({ teamId, challengeId, points: challenge.points }).onConflictDoNothing().returning();
     return { completed: true, points_awarded: award.length ? challenge.points : 0 };
   });

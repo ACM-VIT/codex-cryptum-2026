@@ -28,7 +28,7 @@ async function request<T>(path: string, schema: z.ZodType<T>, method = "GET", bo
   }
   if (!response.ok) {
     throw new ApiError(response.status === 401
-      ? "Sandbox authorization required. Check your participant or organizer token."
+      ? "Sandbox authorization required. Check your team session or organizer token."
       : `Sandbox request failed (${response.status}).`, response.status);
   }
   try { return schema.parse(await response.json()); }
@@ -37,8 +37,8 @@ async function request<T>(path: string, schema: z.ZodType<T>, method = "GET", bo
 
 export const sandboxApi = {
   leaderboard: () => request("", boardSchema),
-  update: (teamId: string, data: { score: number; display_name: string }, token?: string) =>
-    request(`/teams/${encodeURIComponent(teamId)}`, z.object({ entry: entrySchema, scope: z.literal("challenge-sandbox") }), "PATCH", data, token),
-  complete: (token?: string) => request("/complete", z.object({ completed: z.boolean(), points_awarded: z.number() }), "POST", {}, token),
+  update: (teamId: string, data: { score: number; display_name: string }) =>
+    request(`/teams/${encodeURIComponent(teamId)}`, z.object({ entry: entrySchema, scope: z.literal("challenge-sandbox") }), "PATCH", data),
+  complete: () => request("/complete", z.object({ completed: z.boolean(), points_awarded: z.number() }), "POST", {}),
   reset: (organizerToken: string) => request("/reset", z.object({ reset: z.literal(true), scope: z.literal("challenge-sandbox") }), "POST", {}, organizerToken),
 };

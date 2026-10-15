@@ -158,9 +158,9 @@ function ArenaContent({ id }: { id: number }) {
         <ol className="challenge-steps" aria-label="How to complete this challenge">
           {sandbox ? (
             <>
-              <li><strong>Inspect the board.</strong> Review the isolated sandbox teams, IDs, and scores below.</li>
-              <li><strong>Edit another sandbox team’s score.</strong> Select its row, choose a score that puts it first, and apply the sandbox PATCH.</li>
-              <li><strong>Verify completion.</strong> Check the exploit to earn points. No chat or flag is needed; official standings cannot be edited here.</li>
+              <li><strong>Study the board.</strong> Review the isolated teams, IDs, and scores below.</li>
+              <li><strong>Find your route to first place.</strong> The challenge uses a separate sandbox; official standings cannot be edited here.</li>
+              <li><strong>Verify completion.</strong> Move your own team to the top, then check your result. No chat or flag is needed.</li>
             </>
           ) : (
             <>

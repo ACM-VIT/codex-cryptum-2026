@@ -29,10 +29,10 @@ function renderArena(id: number) {
 describe("challenge interaction modes", () => {
   it("renders the sandbox objective and interface without chat or flag controls", () => {
     const html = renderArena(10);
-    for (const text of ["Inspect the board", "Edit another sandbox team", "Verify completion", "Sandbox leaderboard", "Apply sandbox PATCH", "Target sandbox team ID", "Completed"]) {
+    for (const text of ["Study the board", "Find your route to first place", "Verify completion", "Sandbox leaderboard", "Completed"]) {
       expect(html).toContain(text);
     }
-    for (const text of ["Enter flag", "Submit flag", "Reset conversation", "Reset sandbox", "Organizer-only", "turns remaining", "<textarea", 'aria-label="Conversation"']) {
+    for (const text of ["Enter flag", "Submit flag", "Reset conversation", "Reset sandbox", "Organizer-only", "turns remaining", "Apply sandbox PATCH", "Target sandbox team ID", "Participant sandbox token", "<textarea", 'aria-label="Conversation"']) {
       expect(html).not.toContain(text);
     }
   });

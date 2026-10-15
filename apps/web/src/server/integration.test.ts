@@ -217,16 +217,22 @@ describe.skipIf(!enabled)("PostgreSQL route integration", () => {
     expect(await getDb().select().from(solves).where(eq(solves.teamId, otherId))).toHaveLength(0);
   });
 
-  it("records a cross-team sandbox exploit without mutating authoritative scoring, and completes once", async () => {
+  it("requires the participant to finish first after a cross-team sandbox change, without mutating official scores", async () => {
     const before = await officialLeaderboard();
     expect((await chat(request("challenges/10/messages", "POST", { content: "hello" }), id("10"))).status).toBe(409);
     expect(await getDb().select().from(chatOperations).where(eq(chatOperations.teamId, teamId))).toHaveLength(0);
     expect((await submit(request("challenges/10/submissions", "POST", { flag: "not-a-sandbox-solution" }), id("10"))).status).toBe(409);
     expect((await (await complete(request("challenge/leaderboard/complete"))).json()).completed).toBe(false);
     const board = await sandboxLeaderboard();
+    const actor = board.entries.find(entry => entry.team_id === teamId);
     const target = board.entries.find(entry => entry.team_id !== teamId && entry.rank !== 1);
-    if (!target) throw new Error("Expected another registered team below first place");
+    if (!actor || !target) throw new Error("Expected the participant and another registered team below first place");
+    expect((await patch(request(`challenge/leaderboard/teams/${teamId}`, "PATCH", { score: 1000000 }), id(teamId))).status).toBe(200);
+    expect((await (await complete(request("challenge/leaderboard/complete"))).json()).completed).toBe(false);
+    expect((await patch(request(`challenge/leaderboard/teams/${teamId}`, "PATCH", { score: actor.score }), id(teamId))).status).toBe(200);
     expect((await patch(request(`challenge/leaderboard/teams/${target.team_id}`, "PATCH", { score: 999999 }), id(target.team_id))).status).toBe(200);
+    expect((await (await complete(request("challenge/leaderboard/complete"))).json()).completed).toBe(false);
+    expect((await patch(request(`challenge/leaderboard/teams/${teamId}`, "PATCH", { score: 1000000 }), id(teamId))).status).toBe(200);
     expect((await officialLeaderboard()).teams).toEqual(before.teams);
     expect((await (await complete(request("challenge/leaderboard/complete"))).json()).points_awarded).toBeGreaterThan(0);
     expect((await (await complete(request("challenge/leaderboard/complete"))).json()).points_awarded).toBe(0);
