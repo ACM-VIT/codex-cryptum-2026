@@ -3,7 +3,7 @@
 ## Participant flow
 
 - **Levels 1–9:** send prompts, inspect responses, recover your team's flag, submit it.
-- **Level 10:** edit the isolated leaderboard and verify the exploit. No chat or flag submission.
+- **Level 10:** explore the isolated leaderboard, reach first place with your team, and verify your result. No chat or flag submission.
 
 The API tells the UI which interface to show through `interaction` and `completionMethod`. Official points come from unique server-created solve records, never from sandbox scores.
 
@@ -29,7 +29,13 @@ reserve request → input guard → build instructions → model → output guar
 
 Database transactions are short. They are not held open while waiting for the model. Failed requests count toward the rate limit; conversation resets cannot erase that budget. Conflicting requests are rejected, and expired replies are discarded.
 
-The provider uses AI SDK `instructions` for trusted instructions and `messages` for user/assistant history. Generation and classifiers use the same model. Provider errors are sanitized; flags and credentials are not logged.
+The provider uses AI SDK `instructions` for trusted instructions and `messages` for user/assistant history. Levels 7–8 call the private Python pretrained-classifier bridge before generation
+and, for Level 8, before output delivery. Input thresholds remain 0.75/0.80 and
+Level 8 output remains 0.75. Level 9 keeps its existing LLM conversation judge.
+Provider errors are sanitized; flags and credentials are not logged. The shared
+provider returns only final text, strips inline thinking blocks, and rejects
+unexpected reasoning streams. Qwen3 identifiers receive its soft `/no_think`
+control; OpenAI prompts do not. See `security/DEPLOYMENT.md` for the private bridge.
 
 | Level | Prompt | Input guard | Output guard |
 | --- | --- | --- | --- |

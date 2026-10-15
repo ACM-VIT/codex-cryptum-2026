@@ -1,13 +1,11 @@
 "use client";
 import { useRef, type ReactNode } from "react";
 import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
-import Lenis from "lenis";
 import { KeyholeMark } from "../keyhole-mark";
 import ShutterText from "./shutter-text";
 
-gsap.registerPlugin(ScrollTrigger, useGSAP);
+gsap.registerPlugin(useGSAP);
 
 export function ParallaxComponent({ children }: { children?: ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
@@ -24,16 +22,7 @@ export function ParallaxComponent({ children }: { children?: ReactNode }) {
         const reveals = container.querySelectorAll(
           ".hero-keyhole, .cryptum-intro",
         );
-        const header = document.querySelector(".icon-header-home");
-        const timeline = gsap.timeline({
-          scrollTrigger: {
-            trigger: container,
-            start: "top top",
-            end: "bottom bottom",
-            scrub: 0.6,
-            invalidateOnRefresh: true,
-          },
-        });
+        const timeline = gsap.timeline({ paused: true });
         timeline.fromTo(
           title,
           {
@@ -52,60 +41,14 @@ export function ParallaxComponent({ children }: { children?: ReactNode }) {
           { autoAlpha: 1, y: 0, duration: 0.35, stagger: 0.06 },
           0.55,
         );
-        if (header)
-          timeline.fromTo(
-            header,
-            { autoAlpha: 0 },
-            { autoAlpha: 1, duration: 0.25 },
-            0.72,
-          );
         let disposed = false;
-        document.fonts.ready.then(() => {
-          if (!disposed) ScrollTrigger.refresh();
-        });
-        const lenis = new Lenis({ duration: 1.1, smoothWheel: true });
-        const tick = (time: number) => lenis.raf(time * 1000);
-        lenis.on("scroll", ScrollTrigger.update);
-        gsap.ticker.add(tick);
         const completed = new Set<string>();
-        let cancelled = window.scrollY > 10;
-        let scrolling = false;
-        const cancelAutomaticScroll = () => {
-          cancelled = true;
-          if (scrolling) {
-            lenis.scrollTo(window.scrollY, { immediate: true });
-            scrolling = false;
-          }
-        };
-        const events = [
-          "wheel",
-          "touchstart",
-          "pointerdown",
-          "keydown",
-        ] as const;
-        events.forEach((event) =>
-          window.addEventListener(event, cancelAutomaticScroll, {
-            passive: true,
-          }),
-        );
         titleComplete.current = (word) => {
           completed.add(word);
-          if (completed.size !== 2 || cancelled || scrolling) return;
-          // Use actual character-animation completion, then the measured scroll destination.
+          if (completed.size !== 2) return;
           void document.fonts.ready.then(() => {
-            if (disposed || cancelled || window.scrollY > 10) return;
-            ScrollTrigger.refresh();
-            const scrollTrigger = timeline.scrollTrigger;
-            if (!scrollTrigger) return;
-            scrolling = true;
-            lenis.scrollTo(scrollTrigger.end, {
-              duration: 1.6,
-              easing: (progress: number) => 1 - Math.pow(1 - progress, 3),
-              onComplete: () => {
-                scrolling = false;
-                cancelled = true;
-              },
-            });
+            if (disposed) return;
+            timeline.invalidate().timeScale(0.75).play(0);
           });
         };
 
@@ -113,12 +56,7 @@ export function ParallaxComponent({ children }: { children?: ReactNode }) {
         return () => {
           disposed = true;
           titleComplete.current = () => {};
-          events.forEach((event) =>
-            window.removeEventListener(event, cancelAutomaticScroll),
-          );
-          gsap.ticker.remove(tick);
-          lenis.off("scroll", ScrollTrigger.update);
-          lenis.destroy();
+          timeline.kill();
         };
       });
       return () => media.revert();

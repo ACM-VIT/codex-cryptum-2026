@@ -10,6 +10,7 @@ import { AnimatedPage, ErrorNotice } from "../components/ui";
 import { useApp } from "../lib/context";
 import { Input } from "@/components/ui/input";
 import { api } from "../lib/api";
+import { startLiveRefresh } from "../lib/live-refresh";
 import type { Leaderboard } from "../lib/contracts";
 
 export function LeaderboardPage() {
@@ -22,10 +23,9 @@ export function LeaderboardPage() {
   const load = useCallback(async () => {
     const generation = ++requestId.current;
     setLoading(true);
-    setError("");
     try {
       const result = await api.leaderboard();
-      if (requestId.current === generation) setData(result);
+      if (requestId.current === generation) { setData(result); setError(""); }
     } catch (e) {
       if (requestId.current === generation) setError((e as Error).message);
     } finally {
@@ -33,25 +33,10 @@ export function LeaderboardPage() {
     }
   }, []);
   useEffect(() => {
-    let disposed = false;
-    const generation = ++requestId.current;
-    void api.leaderboard()
-      .then((result) => {
-        if (!disposed && requestId.current === generation) {
-          setData(result);
-          setError("");
-        }
-      })
-      .catch((cause: unknown) => {
-        if (!disposed && requestId.current === generation) {
-          setError(cause instanceof Error ? cause.message : "Could not load standings.");
-        }
-      })
-      .finally(() => {
-        if (!disposed && requestId.current === generation) setLoading(false);
-      });
-    return () => { disposed = true; };
-  }, [session?.score]);
+    const stop = startLiveRefresh(load);
+    const invalidate = () => { requestId.current++; };
+    return () => { stop(); invalidate(); };
+  }, [load, session?.score]);
   const me = data?.teams.find((t) => t.id === session?.id);
   const teams =
     data?.teams.filter((t) =>
@@ -62,7 +47,6 @@ export function LeaderboardPage() {
       <div className="page-heading">
         <div>
           <h1>Leaderboard</h1>
-          <p>Authoritative event standings — sandbox changes do not affect this board.</p>
         </div>
       </div>
       <div className="leaderboard-stats">
@@ -73,15 +57,15 @@ export function LeaderboardPage() {
         <div>
           <span>Your score</span>
           <b>
-            {session?.score.toLocaleString() ?? "—"}
+            {me?.score.toLocaleString() ?? "—"}
             <small>PTS</small>
           </b>
         </div>
         <div>
           <span>Your flags</span>
           <b>
-            {session ? String(session.solved.length).padStart(2, "0") : "—"}
-            <small>/ 10</small>
+            {me ? String(me.solved).padStart(2, "0") : "—"}
+            <small>/ {challenges.length}</small>
           </b>
         </div>
       </div>
@@ -142,7 +126,7 @@ export function LeaderboardPage() {
                 <td>
                   <span className="table-flags">
                     {team.solved}
-                    <span className="muted"> / 10</span>
+                    <span className="muted"> / {challenges.length}</span>
                   </span>
                 </td>
                 <td>
@@ -171,9 +155,6 @@ export function LeaderboardPage() {
         )}
       </div>
       <div className="table-foot">
-        <span>
-          {data ? `${data.teams.length} TEAMS` : "—"}
-        </span>
         <span>
           {data
             ? `UPDATED ${new Date(data.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`

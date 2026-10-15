@@ -1,0 +1,6 @@
+# Run from the repository root; uv.lock is the fully reproducible lockfile.
+# uv is preferred; pip cannot consume tool.uv.sources.
+# On Linux, select the CPU build explicitly; macOS uses PyPI's native wheel.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.9.1+cpu; sys_platform == "linux"
+-e .[ml,dev,openai]

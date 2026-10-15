@@ -1,9 +1,10 @@
 import "server-only";
-import { getDb, teams, sessions, solves, messages } from "@cryptum/db";
-import { and, asc, eq, gt } from "drizzle-orm";
-import { sessionSchema, type Session } from "@cryptum/contracts";
+import { getDb, teams, sessions, solves, messages, accessCodeLookup, normalizeAccessCode } from "@cryptum/db";
+import { user as authUser } from "@cryptum/db/auth-schema";
+import { and, asc, desc, eq, gt, lte, ne } from "drizzle-orm";
+import { sessionSchema, teamDetailsSchema, type Session, type TeamDetails } from "@cryptum/contracts";
 import { requireGoogleUser } from "./better-auth";
-import { digest, newToken, verifyAccessCode } from "./security";
+import { decryptAccessCode, digest, encryptAccessCode, hashAccessCode, newAccessCode, newToken, verifyAccessCode } from "./security";
 import { HttpError } from "./http";
 
 const COOKIE = process.env.NODE_ENV === "production" ? "__Host-cryptum-team" : "cryptum-team";
@@ -21,13 +22,37 @@ export function sessionCookie(token: string, clear = false): string {
 export async function currentTeam(request: Request, nullable = false): Promise<string | null> {
   const token = cookieToken(request);
   if (!token && nullable) return null;
-  const user = await requireGoogleUser(request.headers);
+  let user: Awaited<ReturnType<typeof requireGoogleUser>>;
+  try {
+    user = await requireGoogleUser(request.headers);
+  } catch (error) {
+    if (nullable && (error as { status?: unknown }).status === 401) return null;
+    throw error;
+  }
   if (!token) throw new HttpError(401, "Team session required");
   const [session] = await getDb().select({ teamId: sessions.teamId }).from(sessions).where(and(
     eq(sessions.tokenHash, digest(token)), eq(sessions.userId, user.id), gt(sessions.expiresAt, new Date()),
   )).limit(1);
   if (!session && !nullable) throw new HttpError(401, "Team session expired");
   return session?.teamId ?? null;
+}
+
+export async function restoreTeam(request: Request): Promise<{ token: string; teamId: string } | null> {
+  let userId: string;
+  try {
+    userId = (await requireGoogleUser(request.headers)).id;
+  } catch {
+    return null;
+  }
+  return getDb().transaction(async (tx) => {
+    const [membership] = await tx.select({ teamId: sessions.teamId }).from(sessions)
+      .where(eq(sessions.userId, userId)).orderBy(desc(sessions.expiresAt)).limit(1);
+    if (!membership) return null;
+    const token = newToken();
+    await tx.delete(sessions).where(and(eq(sessions.userId, userId), eq(sessions.teamId, membership.teamId), lte(sessions.expiresAt, new Date())));
+    await tx.insert(sessions).values({ userId, teamId: membership.teamId, tokenHash: digest(token), expiresAt: new Date(Date.now() + SESSION_SECONDS * 1000) });
+    return { token, teamId: membership.teamId };
+  });
 }
 
 export async function requireTeam(request: Request): Promise<string> {
@@ -59,12 +84,14 @@ function joinLimit(key: string): void {
   joins.set(key, state);
 }
 
-export async function joinTeam(request: Request, teamName: string, accessCode: string): Promise<{ token: string; teamId: string }> {
+export async function joinTeam(request: Request, accessCode: string, teamName?: string): Promise<{ token: string; teamId: string }> {
   const user = await requireGoogleUser(request.headers);
   joinLimit(user.id);
   const db = getDb();
-  const [team] = await db.select().from(teams).where(eq(teams.name, teamName)).limit(1);
-  const valid = await verifyAccessCode(accessCode, team?.accessCodeHash ?? "");
+  const code = normalizeAccessCode(accessCode);
+  const [team] = await db.select().from(teams)
+    .where(teamName ? eq(teams.name, teamName) : eq(teams.accessCodeLookup, accessCodeLookup(code))).limit(1);
+  const valid = await verifyAccessCode(code, team?.accessCodeHash ?? "");
   if (!team || !valid) throw new HttpError(403, "Invalid team credentials");
   const token = newToken();
   await db.transaction(async (tx) => {
@@ -75,8 +102,65 @@ export async function joinTeam(request: Request, teamName: string, accessCode: s
   return { token, teamId: team.id };
 }
 
-export async function leaveTeam(request: Request): Promise<void> {
+export async function createTeam(request: Request, teamName: string): Promise<{ token: string; teamId: string; accessCode: string }> {
+  const user = await requireGoogleUser(request.headers);
+  joinLimit(user.id);
+  const accessCode = newAccessCode();
+  const accessCodeHash = await hashAccessCode(accessCode);
+  const token = newToken();
+  const teamId = await getDb().transaction(async (tx) => {
+    const [created] = await tx.insert(teams).values({ name: teamName, accessCodeHash, accessCodeEncrypted: encryptAccessCode(accessCode), accessCodeLookup: accessCodeLookup(accessCode), createdBy: user.id }).onConflictDoNothing().returning({ id: teams.id });
+    if (!created) throw new HttpError(409, "Team name is taken");
+    await tx.insert(sessions).values({ userId: user.id, teamId: created.id, tokenHash: digest(token), expiresAt: new Date(Date.now() + SESSION_SECONDS * 1000) });
+    return created.id;
+  });
+  return { token, teamId, accessCode };
+}
+
+export async function teamDetails(request: Request): Promise<TeamDetails> {
+  const viewer = await requireGoogleUser(request.headers);
+  const teamId = await requireTeam(request);
+  const db = getDb();
+  const [team] = await db.select({ createdBy: teams.createdBy, accessCodeEncrypted: teams.accessCodeEncrypted }).from(teams).where(eq(teams.id, teamId)).limit(1);
+  const rows = await db.selectDistinct({ id: authUser.id, name: authUser.name }).from(sessions)
+    .innerJoin(authUser, eq(authUser.id, sessions.userId)).where(eq(sessions.teamId, teamId)).orderBy(asc(authUser.name), asc(authUser.id));
+  return teamDetailsSchema.parse({ accessCode: decryptAccessCode(team?.accessCodeEncrypted ?? null), canRename: !team?.createdBy || team.createdBy === viewer.id, members: rows.map((row) => ({ name: row.name, you: row.id === viewer.id, creator: row.id === team?.createdBy })) });
+}
+
+export async function renameTeam(request: Request, teamName: string): Promise<string> {
+  const viewer = await requireGoogleUser(request.headers);
+  const teamId = await requireTeam(request);
+  return getDb().transaction(async (tx) => {
+    const [team] = await tx.select({ createdBy: teams.createdBy }).from(teams).where(eq(teams.id, teamId)).for("update");
+    if (!team) throw new HttpError(401, "Team unavailable");
+    if (team.createdBy && team.createdBy !== viewer.id) throw new HttpError(403, "Only the team creator can rename the team");
+    const [taken] = await tx.select({ id: teams.id }).from(teams).where(and(eq(teams.name, teamName), ne(teams.id, teamId))).limit(1);
+    if (taken) throw new HttpError(409, "Team name is taken");
+    await tx.update(teams).set({ name: teamName }).where(eq(teams.id, teamId));
+    return teamId;
+  });
+}
+
+export async function leaveTeam(request: Request, confirmDelete = false): Promise<{ deleted: boolean }> {
   const user = await requireGoogleUser(request.headers);
   const token = cookieToken(request);
-  if (token) await getDb().delete(sessions).where(and(eq(sessions.tokenHash, digest(token)), eq(sessions.userId, user.id)));
+  if (!token) return { deleted: false };
+  return getDb().transaction(async (tx) => {
+    const [membership] = await tx.select({ teamId: sessions.teamId }).from(sessions)
+      .where(and(eq(sessions.tokenHash, digest(token)), eq(sessions.userId, user.id))).limit(1);
+    if (!membership) return { deleted: false };
+    await tx.select({ id: teams.id }).from(teams).where(eq(teams.id, membership.teamId)).for("update");
+    const [other] = await tx.select({ id: sessions.id }).from(sessions)
+      .where(and(eq(sessions.teamId, membership.teamId), ne(sessions.userId, user.id))).limit(1);
+    if (!other && !confirmDelete) throw new HttpError(409, "You are the last member. Leaving will delete this team.");
+    await tx.delete(sessions).where(and(eq(sessions.teamId, membership.teamId), eq(sessions.userId, user.id)));
+    if (!other) await tx.delete(teams).where(eq(teams.id, membership.teamId));
+    return { deleted: !other };
+  });
+}
+
+export async function endSession(request: Request): Promise<void> {
+  const user = await requireGoogleUser(request.headers);
+  const token = cookieToken(request);
+  if (token) await getDb().update(sessions).set({ expiresAt: new Date() }).where(and(eq(sessions.tokenHash, digest(token)), eq(sessions.userId, user.id)));
 }

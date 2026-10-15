@@ -1,13 +1,6 @@
-import { randomBytes, scryptSync } from "node:crypto";
-import { getDb, closeDb, challenges, teams, sandboxTeams } from "../src/index.js";
-import { requireEnv } from "./env.js";
+import { getDb, closeDb, challenges } from "../src/index.js";
+import "./env.js";
 import { challengeSeed } from "./challenges.js";
-
-// Matches the authentication service: scrypt(code, salt, 64), stored salt:hex.
-const code = requireEnv("DEV_TEAM_ACCESS_CODE");
-const salt = randomBytes(16).toString("hex");
-const accessCodeHash = `${salt}:${scryptSync(code, salt, 64).toString("hex")}`;
-const demoTeamName = process.env.DEV_TEAM_NAME || "Demo Team";
 
 try {
   await getDb().transaction(async (tx) => {
@@ -27,16 +20,9 @@ try {
         },
       });
     }
-    await tx.insert(teams).values({ name: demoTeamName, accessCodeHash })
-      .onConflictDoUpdate({ target: teams.name, set: { accessCodeHash } });
-    await tx.insert(sandboxTeams).values([
-      { id: "team-aurora", name: "Aurora Labs", score: 4200 },
-      { id: "team-borealis", name: "Borealis Security", score: 3300 },
-      { id: "team-cipher", name: "Cipher Collective", score: 2700 },
-      { id: "team-ember", name: "Ember Research", score: 1900 },
-    ]).onConflictDoNothing();
+
   });
-  console.log("Seeded 10 challenges, demo team, and PR2 sandbox teams.");
+  console.log("Updated the challenge catalog. Teams are created by participants.");
 } finally {
   await closeDb();
 }

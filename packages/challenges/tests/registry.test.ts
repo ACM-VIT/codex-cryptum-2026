@@ -11,6 +11,16 @@ vi.mock("server-only", () => ({}));
 const expectedIds = Array.from({ length: 10 }, (_, index) => index + 1);
 
 describe("challenge registry", () => {
+  it("gives every flag challenge a unique, well-formed phrase that stays out of public metadata", () => {
+    const phrases = challengeDefinitions.filter(isLlmDefinition).map((definition) => definition.flagPhrase);
+    expect(phrases).toHaveLength(9);
+    expect(new Set(phrases).size).toBe(phrases.length);
+    for (const phrase of phrases) {
+      expect(phrase).toMatch(/^[a-z0-9]+(?:_[a-z0-9]+)*$/);
+      expect(JSON.stringify(challengeCatalog)).not.toContain(phrase);
+    }
+  });
+
   it("has unique, complete public metadata and server definitions", () => {
     expect(challengeCatalog.map(({ id }) => id).sort((a, b) => a - b)).toEqual(expectedIds);
     expect(challengeDefinitions.map(({ id }) => id).sort((a, b) => a - b)).toEqual(expectedIds);
@@ -28,13 +38,13 @@ describe("challenge registry", () => {
     const matrix = [
       ["open", "none", "none"],
       ["private", "none", "none"],
-      ["hardened", "none", "none"],
-      ["hardened", "keyword", "none"],
-      ["hardened", "none", "exact"],
-      ["hardened", "none", "normalized"],
-      ["hardened", "classifier", "none"],
-      ["hardened", "classifier", "classifier"],
-      ["hardened", "conversation", "classifier"],
+      ["notes", "none", "none"],
+      ["private", "keyword", "none"],
+      ["private", "none", "exact"],
+      ["private", "none", "normalized"],
+      ["private", "classifier", "none"],
+      ["private", "classifier", "classifier"],
+      ["vault", "blocklist", "conversation"],
     ];
     const llm = challengeDefinitions.filter(isLlmDefinition);
     expect(llm.map(({ execution }) => [execution.promptPolicy, execution.inputGuard, execution.outputGuard])).toEqual(matrix);
@@ -45,7 +55,7 @@ describe("challenge registry", () => {
     expect(getChallengeDefinition(10)).toEqual({ id: 10, execution: { kind: "sandbox" } });
     expect(getChallengeMetadata(10)).toMatchObject({ interaction: "sandbox", completionMethod: "sandbox", points: 1000, turnLimit: null });
     expect(getChallengeMetadata(10)?.description).toMatch(/isolated leaderboard sandbox/);
-    expect(getChallengeMetadata(10)?.description).toMatch(/cross-team score update/);
+    expect(getChallengeMetadata(10)?.description).toMatch(/your team to first place/i);
   });
 
   it("exports only public metadata without execution policies or secret values", () => {

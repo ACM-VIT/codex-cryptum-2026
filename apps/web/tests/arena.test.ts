@@ -29,10 +29,10 @@ function renderArena(id: number) {
 describe("challenge interaction modes", () => {
   it("renders the sandbox objective and interface without chat or flag controls", () => {
     const html = renderArena(10);
-    for (const text of ["Inspect the board", "Edit another sandbox team", "Verify completion", "Sandbox leaderboard", "Apply sandbox PATCH", "Target sandbox team ID", "Completed"]) {
+    for (const text of ["Study the board", "Find your route to first place", "Verify completion", "Sandbox leaderboard", "Completed"]) {
       expect(html).toContain(text);
     }
-    for (const text of ["Enter flag", "Submit flag", "Reset conversation", "Reset sandbox", "Organizer-only", "turns remaining", "<textarea", 'aria-label="Conversation"']) {
+    for (const text of ["Enter flag", "Submit flag", "Reset conversation", "Reset sandbox", "Organizer-only", "turns remaining", "Apply sandbox PATCH", "Target sandbox team ID", "Participant sandbox token", "<textarea", 'aria-label="Conversation"']) {
       expect(html).not.toContain(text);
     }
   });
@@ -43,6 +43,21 @@ describe("challenge interaction modes", () => {
       expect(html).toContain(text);
     }
     expect(html).not.toContain("Sandbox leaderboard");
+  });
+
+  it("hides flag entry when reopening a solved chat challenge", () => {
+    route.id = "9";
+    if (!state.session) throw new Error("Expected a test team session");
+    const solvedState = { ...state, session: { ...state.session, solved: [9] } };
+    const html = renderToStaticMarkup(createElement(AppContext.Provider, { value: solvedState }, createElement(Arena)));
+    expect(html).toContain("Flag captured");
+    expect(html).toContain("Completed");
+    expect(html).not.toContain('aria-controls="flag-entry"');
+    expect(html).not.toContain('id="flag-entry"');
+    expect(html).not.toContain("Reset conversation");
+    expect(html).not.toContain("<textarea");
+    expect(html).not.toContain("Chat is now closed.");
+    expect(html).toContain("Next challenge:");
   });
 
   it("labels challenge cards with the matching interaction and completion method", () => {

@@ -22,6 +22,11 @@ function modelConfig() {
 // Keep transport hardening while delegating provider requests and parsing to the SDK.
 const providerFetch: typeof fetch = async (input, init) => {
   const response = await fetch(input, { ...init, cache: "no-store", redirect: "error" });
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  if (contentType.includes("text/event-stream") || contentType.includes("application/x-ndjson")) {
+    await response.body?.cancel();
+    throw new Error("Unexpected streaming response");
+  }
   const reader = response.body?.getReader();
   if (!reader) throw new Error("Empty provider response");
   const chunks: Uint8Array[] = [];
@@ -38,29 +43,43 @@ const providerFetch: typeof fetch = async (input, init) => {
   return new Response(Buffer.concat(chunks), { status: response.status, headers: response.headers });
 };
 
-export interface ModelRequest { instructions: string; messages: Turn[]; maxOutputTokens?: number }
+export interface ModelRequest { instructions: string; messages: Turn[]; maxOutputTokens?: number; temperature?: number }
 export type ModelProvider = (request: ModelRequest) => Promise<string>;
 
 export function validateModelConfig(): void { modelConfig(); }
 
-export async function complete({ instructions, messages, maxOutputTokens = 2048 }: ModelRequest): Promise<string> {
+/** Keep only the final channel; malformed/open reasoning markers fail closed. */
+export function withoutThinking(value: string): string {
+  const endings = [...value.matchAll(/<\/think\s*>/gi)];
+  const last = endings.at(-1);
+  const final = last ? value.slice(last.index + last[0].length).trim() : value;
+  if (/<\s*\/?\s*think\b|<\|analysis\b/i.test(final)) return "";
+  return final;
+}
+
+export async function complete({ instructions, messages, maxOutputTokens = 2048, temperature = 0.3 }: ModelRequest): Promise<string> {
   const { model, ...config } = modelConfig();
+  // Only known Qwen3 family identifiers get Qwen's soft prompt control.
+  const qwen = /^(?:qwen3(?::|$)|qwen\/qwen3-)/i.test(model);
   try {
     const result = await generateText({
       model: createOpenAI({ ...config, fetch: providerFetch }).chat(model),
-      instructions,
-      messages,
+      instructions: qwen ? `${instructions} /no_think` : instructions,
+      messages: qwen ? messages.map(turn => turn.role === "user"
+        ? { ...turn, content: `${turn.content} /no_think` } : turn) : messages,
       maxOutputTokens,
       maxRetries: 0,
       timeout: { totalMs: 45_000 },
-      // Luna supports no-reasoning mode: classifiers need only an eight-token verdict.
+      // Preserve the existing API control: verified with Luna and local Ollama /v1.
+      // Qwen's soft /no_think hint alone is not a hard disable in that runtime.
       providerOptions: { openai: { reasoningEffort: "none" } },
-      temperature: 0.3,
+      temperature,
       telemetry: { isEnabled: false },
     });
     if (result.finishReason === "content-filter") return REDACTION;
-    if (result.finishReason === "error" || !result.text || result.text.length > 32768) throw new Error("Invalid model output");
-    return result.text;
+    const text = withoutThinking(result.text ?? "");
+    if (result.finishReason === "error" || !text || text.length > 32768) throw new Error("Invalid model output");
+    return text;
   } catch {
     // SDK errors can contain request bodies, credentials and confidential flags.
     throw new HttpError(503, "Model unavailable");
