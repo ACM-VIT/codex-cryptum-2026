@@ -3,7 +3,7 @@
 ## Participant flow
 
 - **Levels 1–9:** send prompts, inspect responses, recover your team's flag, submit it.
-- **Level 10:** explore the isolated leaderboard, reach first place with your team, and verify your result. No chat or flag submission.
+- **Level 10 (hidden):** not listed in the catalog. Assistants on levels 1–9 drop a cryptic hint about `/api/challenge/leaderboard` on about 1 in 8 replies. Teams that find the isolated leaderboard, reach first place, and verify through the API earn 1000 points. No chat or flag submission.
 
 The API tells the UI which interface to show through `interaction` and `completionMethod`. Official points come from unique server-created solve records, never from sandbox scores.
 
