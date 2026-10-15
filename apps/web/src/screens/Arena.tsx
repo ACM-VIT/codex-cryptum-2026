@@ -72,10 +72,7 @@ function ArenaContent({ id }: { id: number }) {
     try {
       const result = await transact(() => api.chat(id, content));
       setSession(result);
-      if (mounted.current) {
-        setPrompt("");
-        composer.current?.focus();
-      }
+      if (mounted.current) setPrompt("");
     } catch (e) {
       if (mounted.current) setError((e as Error).message);
       else toast((e as Error).message);

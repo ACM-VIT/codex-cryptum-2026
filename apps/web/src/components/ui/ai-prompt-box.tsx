@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  useEffect,
   useLayoutEffect,
   useRef,
   useImperativeHandle,
@@ -48,12 +49,20 @@ export const PromptInputBox = forwardRef<
       textarea.current.style.height = `${Math.min(96, Math.max(36, textarea.current.scrollHeight))}px`;
     }, [value]);
     const blocked = disabled || isLoading;
+    const refocus = useRef(false);
+    useEffect(() => {
+      if (blocked || !refocus.current) return;
+      refocus.current = false;
+      textarea.current?.focus();
+    }, [blocked]);
     return (
       <form
         className={cn("ai-prompt-box", className)}
         onSubmit={(event) => {
           event.preventDefault();
-          if (value.trim() && !blocked) onSend();
+          if (!value.trim() || blocked) return;
+          refocus.current = true;
+          onSend();
         }}
       >
         <textarea
