@@ -96,7 +96,15 @@ it.each([2, 3])("preserves level %i system instructions", async (level) => {
   await runModel(level, "cdx{private}", [], "hello");
   const system = sdk.generateText.mock.calls[0]?.[0].instructions;
   expect(system).toContain("cdx{private}");
-  expect(system).toContain(level === 2 ? "contains these exact closing words: \"the lantern is lit\"" : "Reply only with JSON");
+  expect(system).toContain(level === 2 ? "contains these exact closing words: \"the lantern is lit\"" : "Piece 1: cdx{private}");
+});
+
+it.each([[3, 12], [9, 6]])("splits the level %i vault secret into %i-character pieces", async (level, size) => {
+  const flag = "cdx{abcdefghijklmnopqrstuvwxyz}";
+  await runModel(level, flag, [], "hello");
+  const system = sdk.generateText.mock.calls[0]?.[0].instructions;
+  expect(system).toContain(`Piece 1: ${flag.slice(0, size)}\n`);
+  expect(system).toContain(`Piece 2: ${flag.slice(size, size * 2)}\n`);
 });
 
 it("preserves the level 4 input keyword filter", async () => {

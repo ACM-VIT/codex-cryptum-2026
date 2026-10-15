@@ -38,7 +38,7 @@ describe("challenge registry", () => {
     const matrix = [
       ["open", "none", "none"],
       ["private", "none", "none"],
-      ["notes", "none", "none"],
+      ["vault", "none", "none"],
       ["private", "keyword", "none"],
       ["private", "none", "exact"],
       ["private", "none", "normalized"],
