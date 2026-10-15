@@ -48,9 +48,9 @@ control; OpenAI prompts do not. See `security/DEPLOYMENT.md` for the private bri
 | 7 | Private, closing words | Classifier | None |
 | 8 | Private, closing words | Classifier | Classifier |
 | 9 | Vault, 6-character pieces | Blocklist | Leak filter and conversation judge |
+| 10 | No model | Sandbox exploit | Server verification |
 
 Private levels keep the flag until the player types that level's closing words, which the model only reveals when asked for its rules. Vault levels release one numbered piece per message. Neither can be won with a single message.
-| 10 | No model | Sandbox exploit | Server verification |
 
 These weaknesses are intentional CTF mechanics. Do not use them to protect real secrets.
 
