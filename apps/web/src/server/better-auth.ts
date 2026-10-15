@@ -17,6 +17,10 @@ const requiredVariables = [
 
 export function getGoogleAuthConfiguration() {
   const missing = requiredVariables.filter((name) => !process.env[name]?.trim());
+  const secret = process.env.BETTER_AUTH_SECRET;
+  if (secret?.trim() && secret.length < 32 && !missing.includes("BETTER_AUTH_SECRET")) {
+    missing.push("BETTER_AUTH_SECRET");
+  }
   return { configured: missing.length === 0, missing };
 }
 
