@@ -214,21 +214,21 @@ function ArenaContent({ id }: { id: number }) {
           </Link>
         )}
       </section>
-      {sandbox ? <SandboxLeaderboard showOrganizerTools={false} /> : solved ? null : <section
+      {sandbox ? <SandboxLeaderboard showOrganizerTools={false} /> : solved && !messages.length ? null : <section
         className="challenge-conversation"
         aria-labelledby="conversation-title"
       >
         <div className="conversation-heading">
           <h2 id="conversation-title">Chat</h2>
-          <button
+          {!solved && <button
             className="text-button"
             disabled={busy || !messages.length}
             onClick={() => setResetting(true)}
           >
             Reset conversation
-          </button>
+          </button>}
         </div>
-        {challenge.turnLimit != null && (
+        {!solved && challenge.turnLimit != null && (
           <p className="conversation-limit">
             {Math.max(0, challenge.turnLimit - usedTurns)} of{" "}
             {challenge.turnLimit} turns remaining
@@ -273,12 +273,12 @@ function ArenaContent({ id }: { id: number }) {
           <div ref={end} />
         </div>
         {error && <ErrorNotice message={error} />}
-        {exhausted && (
+        {!solved && exhausted && (
           <p className="notice">
             Turn limit reached. Reset this conversation to try again.
           </p>
         )}
-        <PromptInputBox
+        {!solved && <PromptInputBox
           ref={composer}
           value={prompt}
           onValueChange={setPrompt}
@@ -290,7 +290,7 @@ function ArenaContent({ id }: { id: number }) {
               ? "Reset to start a new conversation…"
               : "Type your message…"
           }
-        />
+        />}
       </section>}
       {!sandbox && !solved && resetting && (
         <Dialog
